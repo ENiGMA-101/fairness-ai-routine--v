@@ -1,30 +1,64 @@
 import Link from "next/link";
-import { db } from "@/db";
+import { db, isDatabaseConfigured } from "@/db";
 import { form1Responses, form2Responses } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
 
-async function getCounts() {
+async function getStatus() {
+  const configured = isDatabaseConfigured();
+  if (!configured) {
+    return { form1: 0, form2: 0, ok: false as const, configured: false };
+  }
   try {
     const one = await db.select({ id: form1Responses.id }).from(form1Responses);
     const two = await db.select({ id: form2Responses.id }).from(form2Responses);
-    return { form1: one.length, form2: two.length, ok: true as const };
+    return { form1: one.length, form2: two.length, ok: true as const, configured: true };
   } catch {
-    return { form1: 0, form2: 0, ok: false as const };
+    return { form1: 0, form2: 0, ok: false as const, configured: true };
   }
 }
 
 export default async function Home() {
-  const counts = await getCounts();
+  const status = await getStatus();
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-10">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm font-black tracking-tight sm:text-base">
           UAP • Fairness-Aware AI Routine Generator
         </div>
-        <div className="text-xs text-zinc-500 sm:text-sm">Research Survey 2025</div>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/setup"
+            className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold transition ${
+              status.ok
+                ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                : "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+            }`}
+          >
+            <span
+              className={`h-2 w-2 rounded-full ${status.ok ? "bg-emerald-500" : "bg-amber-500"}`}
+            />
+            {status.ok ? "DB Connected" : "DB Setup Needed"}
+          </Link>
+          <div className="text-xs text-zinc-500 sm:text-sm">Research Survey 2025</div>
+        </div>
       </header>
+
+      {!status.ok && (
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+          <div>
+            <b>Database setup required:</b> You need to connect a free Postgres database to Vercel
+            so responses can be saved.
+          </div>
+          <Link
+            href="/setup"
+            className="rounded-full bg-amber-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-amber-700"
+          >
+            Open 60-second setup guide →
+          </Link>
+        </div>
+      )}
 
       <div className="mt-12 grid items-center gap-10 md:grid-cols-2">
         <div>
@@ -54,11 +88,11 @@ export default async function Home() {
           <div className="mt-8 grid grid-cols-2 gap-3">
             <div className="rounded-2xl border border-zinc-200 bg-white p-4">
               <div className="text-xs uppercase tracking-wide text-zinc-400">Form 1 responses</div>
-              <div className="text-3xl font-black">{counts.form1}</div>
+              <div className="text-3xl font-black">{status.form1}</div>
             </div>
             <div className="rounded-2xl border border-zinc-200 bg-white p-4">
               <div className="text-xs uppercase tracking-wide text-zinc-400">Form 2 responses</div>
-              <div className="text-3xl font-black">{counts.form2}</div>
+              <div className="text-3xl font-black">{status.form2}</div>
             </div>
           </div>
         </div>
@@ -96,7 +130,7 @@ export default async function Home() {
         </div>
       </div>
 
-      <section className="mt-12 grid gap-4 md:grid-cols-3">
+      <section className="mt-12 grid gap-4 md:grid-cols-4">
         <Link
           href="/results/form1"
           className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm transition hover:border-zinc-400"
@@ -113,15 +147,23 @@ export default async function Home() {
           <div className="mt-1 font-bold">Form 2 live results</div>
           <p className="mt-1 text-sm text-zinc-500">Average rating per slot, best/worst slot, feedback.</p>
         </Link>
+        <Link
+          href="/setup"
+          className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm transition hover:border-zinc-400"
+        >
+          <div className="text-xs uppercase tracking-wide text-zinc-400">Database Help</div>
+          <div className="mt-1 font-bold">Vercel DB Setup</div>
+          <p className="mt-1 text-sm text-zinc-500">1-click guide to connect free Neon/Postgres.</p>
+        </Link>
         <a
           href="/fairness-app.zip"
           download
           className="rounded-2xl border border-violet-300 bg-violet-50 p-5 shadow-sm transition hover:border-violet-500"
         >
-          <div className="text-xs uppercase tracking-wide text-violet-500">Deploy anywhere</div>
-          <div className="mt-1 font-bold text-violet-800">⬇ Download Vercel-ready ZIP</div>
+          <div className="text-xs uppercase tracking-wide text-violet-500">Updated ZIP</div>
+          <div className="mt-1 font-bold text-violet-800">⬇ Download Vercel ZIP</div>
           <p className="mt-1 text-sm text-violet-700">
-            Full source, schema SQL and step-by-step Vercel deploy guide.
+            Auto-healing tables, multi-env detection &amp; SSL ready.
           </p>
         </a>
       </section>

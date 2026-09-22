@@ -1,0 +1,6 @@
+{
+  "/api/form1/stats/route": "app/api/form1/stats/route.js",
+  "/api/form1/submit/route": "app/api/form1/submit/route.js",
+  "/form1/page": "app/form1/page.js",
+  "/page": "app/page.js"
+}

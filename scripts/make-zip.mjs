@@ -99,10 +99,11 @@ if (existsSync(pagePath)) {
       'href="/fairness-app.zip"',
       'href="https://vercel.com/new" target="_blank" rel="noreferrer"',
     )
+    .replace("⬇ Download Vercel ZIP", "Deploy this app to Vercel →")
     .replace("⬇ Download Vercel-ready ZIP", "Deploy this app to Vercel →")
     .replace(
-      "Full source, schema SQL and step-by-step Vercel deploy guide.",
-      "Read DEPLOY.md in the project root for the 30-second setup guide.",
+      "Auto-healing tables, multi-env detection & SSL ready.",
+      "Read DEPLOY.md in the project root for the 60-second setup guide.",
     );
   writeFileSync(pagePath, page);
 }

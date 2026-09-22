@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { db } from "@/db";
+import { db, ensureTablesExist, isDatabaseConfigured } from "@/db";
 import { form2Responses } from "@/db/schema";
 import { DEPARTMENTS, TIME_SLOTS } from "@/lib/survey";
 
@@ -63,34 +63,78 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Both rating questions are required" }, { status: 400 });
   }
 
-  try {
-    const inserted = await db
+  if (!isDatabaseConfigured()) {
+    return NextResponse.json(
+      {
+        error:
+          "Database not connected. Please add DATABASE_URL or POSTGRES_URL in Vercel Settings > Environment Variables (or visit /setup for the 1-click guide).",
+      },
+      { status: 500 },
+    );
+  }
+
+  const insertData = {
+    browserId,
+    role,
+    department,
+    departmentOther,
+    timeSlot800: slotValues[0]!.value,
+    timeSlot930: slotValues[1]!.value,
+    timeSlot1100: slotValues[2]!.value,
+    timeSlot1230: slotValues[3]!.value,
+    timeSlot1400: slotValues[4]!.value,
+    timeSlot1530: slotValues[5]!.value,
+    timeSlot1700: slotValues[6]!.value,
+    longGapRating: longGap,
+    fairnessRating: fairness,
+    feedback: body.feedback?.toString().trim().slice(0, 2000) || null,
+  };
+
+  const doInsert = async () => {
+    return await db
       .insert(form2Responses)
-      .values({
-        browserId,
-        role,
-        department,
-        departmentOther,
-        timeSlot800: slotValues[0]!.value,
-        timeSlot930: slotValues[1]!.value,
-        timeSlot1100: slotValues[2]!.value,
-        timeSlot1230: slotValues[3]!.value,
-        timeSlot1400: slotValues[4]!.value,
-        timeSlot1530: slotValues[5]!.value,
-        timeSlot1700: slotValues[6]!.value,
-        longGapRating: longGap,
-        fairnessRating: fairness,
-        feedback: body.feedback?.toString().trim().slice(0, 2000) || null,
-      })
+      .values(insertData)
       .onConflictDoNothing({ target: form2Responses.browserId })
       .returning({ id: form2Responses.id });
+  };
+
+  try {
+    // Ensure tables exist before first write
+    await ensureTablesExist();
+    const inserted = await doInsert();
 
     if (!inserted.length) {
       return NextResponse.json({ error: "duplicate", duplicate: true }, { status: 409 });
     }
     return NextResponse.json({ ok: true, id: inserted[0].id });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unexpected error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    // If the error was due to missing tables, retry once after explicit table creation
+    const rawMessage = error instanceof Error ? error.message : String(error);
+    if (rawMessage.includes("relation") && rawMessage.includes("does not exist")) {
+      try {
+        await ensureTablesExist();
+        const retryInserted = await doInsert();
+        if (!retryInserted.length) {
+          return NextResponse.json({ error: "duplicate", duplicate: true }, { status: 409 });
+        }
+        return NextResponse.json({ ok: true, id: retryInserted[0].id });
+      } catch (retryError) {
+        const retryMsg = retryError instanceof Error ? retryError.message : String(retryError);
+        return NextResponse.json(
+          { error: `Database table error: ${retryMsg}. Visit /setup to initialize tables.` },
+          { status: 500 },
+        );
+      }
+    }
+
+    // Friendly error messaging instead of raw SQL dumps
+    if (rawMessage.includes("password authentication failed") || rawMessage.includes("connect ECONNREFUSED")) {
+      return NextResponse.json(
+        { error: "Database connection failed. Please verify your DATABASE_URL credentials." },
+        { status: 500 },
+      );
+    }
+
+    return NextResponse.json({ error: `Database error: ${rawMessage}` }, { status: 500 });
   }
 }

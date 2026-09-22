@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { db } from "@/db";
+import { db, ensureTablesExist, isDatabaseConfigured } from "@/db";
 import { form1Responses } from "@/db/schema";
 import { FORM1_ROW_KEYS } from "@/lib/results";
 import { FORM1_COLUMN_KEYS } from "@/lib/survey";
@@ -12,7 +12,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "invalid question" }, { status: 400 });
   }
 
+  if (!isDatabaseConfigured()) {
+    return NextResponse.json({ total: 0, counts: {}, percentages: {} });
+  }
+
   try {
+    await ensureTablesExist();
     const key = FORM1_ROW_KEYS[question];
     const rows = await db.select({ value: form1Responses[key] }).from(form1Responses);
 
@@ -33,7 +38,15 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ total, counts, percentages });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unexpected error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const rawMessage = error instanceof Error ? error.message : "Unexpected error";
+    if (rawMessage.includes("relation") && rawMessage.includes("does not exist")) {
+      try {
+        await ensureTablesExist();
+        return NextResponse.json({ total: 0, counts: {}, percentages: {} });
+      } catch {
+        return NextResponse.json({ total: 0, counts: {}, percentages: {} });
+      }
+    }
+    return NextResponse.json({ total: 0, counts: {}, percentages: {} });
   }
 }

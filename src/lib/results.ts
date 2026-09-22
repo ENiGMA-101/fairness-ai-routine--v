@@ -1,5 +1,5 @@
 import { desc } from "drizzle-orm";
-import { db } from "@/db";
+import { db, ensureTablesExist, isDatabaseConfigured } from "@/db";
 import { form1Responses, form2Responses, type Form1Row, type Form2Row } from "@/db/schema";
 import { FORM1_QUESTIONS, TIME_SLOTS, labelFor } from "./survey";
 
@@ -89,6 +89,23 @@ export type Form1Results = {
 };
 
 export async function getForm1Results(): Promise<Form1Results> {
+  if (!isDatabaseConfigured()) {
+    return {
+      totalResponses: 0,
+      students: 0,
+      teachers: 0,
+      distributions: FORM1_QUESTIONS.map((q) => ({
+        id: q.id,
+        title: q.titleBn,
+        titleEn: q.titleEn,
+        total: 0,
+        rows: [],
+      })),
+      recent: [],
+    };
+  }
+
+  await ensureTablesExist();
   const rows = await db.select().from(form1Responses).orderBy(desc(form1Responses.createdAt));
 
   const distributions: Distribution[] = FORM1_QUESTIONS.map((q) => {
@@ -127,8 +144,6 @@ export type Form2Results = {
 };
 
 export async function getForm2Results(): Promise<Form2Results> {
-  const rows = await db.select().from(form2Responses).orderBy(desc(form2Responses.createdAt));
-
   const ratingSummary = (
     id: string,
     label: string,
@@ -142,6 +157,24 @@ export async function getForm2Results(): Promise<Form2Results> {
     total: values.length,
     distribution: tally(values),
   });
+
+  if (!isDatabaseConfigured()) {
+    const emptySlots = TIME_SLOTS.map((s) => ratingSummary(s.id, s.label, s.range, []));
+    return {
+      totalResponses: 0,
+      students: 0,
+      teachers: 0,
+      slots: emptySlots,
+      longGap: ratingSummary("long_gap_rating", "Long campus gaps", undefined, []),
+      fairness: ratingSummary("fairness_rating", "Multi-semester fairness", undefined, []),
+      roleSplit: { id: "role", title: "Role", total: 0, rows: [] },
+      departmentSplit: { id: "department", title: "Department", total: 0, rows: [] },
+      feedback: [],
+    };
+  }
+
+  await ensureTablesExist();
+  const rows = await db.select().from(form2Responses).orderBy(desc(form2Responses.createdAt));
 
   const slots = TIME_SLOTS.map((slot) => {
     const key = FORM2_ROW_KEYS[slot.id];
