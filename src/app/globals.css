@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+:root {
+  --font-bn: "Hind Siliguri", "Noto Sans Bengali", "Kalpurush", "SolaimanLipi", system-ui,
+    -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+body {
+  font-family: var(--font-bn);
+}
+
+::selection {
+  background: #ddd6fe;
+}
