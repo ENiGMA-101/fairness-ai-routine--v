@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Sparkles } from "lucide-react";
 import { useStats, type Stats } from "./PollCard";
 
@@ -41,6 +41,9 @@ export default function RatingPoll({
 }: Props) {
   const { stats, load } = useStats(form);
   const current = initialStats?.[questionId] ?? stats[questionId];
+  // Distribution hidden until THIS user picks a rating here.
+  const [revealed, setRevealed] = useState(false);
+  const showStats = revealed && Boolean(current);
 
   // Preload on mount in background
   useEffect(() => {
@@ -50,6 +53,7 @@ export default function RatingPoll({
 
   const select = (n: number) => {
     onChange(n);
+    setRevealed(true);
     void load(questionId);
   };
 
@@ -103,37 +107,32 @@ export default function RatingPoll({
         </span>
       </div>
 
-      {/* Live Distribution — ONLY show after user clicks an option */}
-      {(() => {
-        const hasSelected = value !== null && value !== undefined;
-        if (!hasSelected || !current) return null;
-
-        return (
-          <div className="mt-5 space-y-2 rounded-2xl bg-zinc-50 p-4 border border-zinc-200">
-            <div className="flex items-center justify-between text-xs text-zinc-500 mb-1">
-              <span className="font-bold text-violet-700 flex items-center gap-1">
-                <Sparkles className="h-3.5 w-3.5" /> Live community votes
-              </span>
-              <span>{current.total} response{current.total === 1 ? "" : "s"}</span>
-            </div>
-            {[1, 2, 3, 4, 5].map((n) => {
-              const pct = current.percentages?.[String(n)] ?? 0;
-              return (
-                <div key={n} className="flex items-center gap-2.5 text-xs">
-                  <span className="w-5 font-bold text-zinc-600">{n} ★</span>
-                  <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-zinc-200">
-                    <div
-                      className="h-full rounded-full bg-violet-600 transition-all duration-500"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  <span className="w-10 text-right font-black text-zinc-800">{pct}%</span>
-                </div>
-              );
-            })}
+      {/* Live Distribution — only after user picks a rating */}
+      {showStats ? (
+        <div className="mt-5 space-y-2 rounded-2xl bg-zinc-50 p-4 border border-zinc-200">
+          <div className="flex items-center justify-between text-xs text-zinc-500 mb-1">
+            <span className="font-bold text-violet-700 flex items-center gap-1">
+              <Sparkles className="h-3.5 w-3.5" /> Live community votes
+            </span>
+            <span>{current.total} response{current.total === 1 ? "" : "s"}</span>
           </div>
-        );
-      })()}
+          {[1, 2, 3, 4, 5].map((n) => {
+            const pct = current.percentages?.[String(n)] ?? 0;
+            return (
+              <div key={n} className="flex items-center gap-2.5 text-xs">
+                <span className="w-5 font-bold text-zinc-600">{n} ★</span>
+                <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-zinc-200">
+                  <div
+                    className="h-full rounded-full bg-violet-600 transition-all duration-500"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <span className="w-10 text-right font-black text-zinc-800">{pct}%</span>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
     </section>
   );
 }

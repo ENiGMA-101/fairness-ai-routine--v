@@ -12,14 +12,18 @@ import {
   Building2,
   Home,
   MessageSquare,
+  ShieldCheck,
 } from "lucide-react";
 import RatingPoll from "@/components/RatingPoll";
 import TimeSlotMatrix from "@/components/TimeSlotMatrix";
 import { VisualFairness, VisualLongGapForm2 } from "@/components/Visuals";
 import { getBrowserId, isSubmitted, markSubmitted } from "@/lib/browser";
-import { DEPARTMENTS, TIME_SLOTS } from "@/lib/survey";
+import { DEPARTMENTS, TIME_SLOTS, shuffle } from "@/lib/survey";
 
 const ROLES = ["Student", "Teacher"];
+
+type RatingQId = "long_gap_rating" | "fairness_rating";
+const RATING_QUESTION_IDS: RatingQId[] = ["long_gap_rating", "fairness_rating"];
 
 export default function Form2Page() {
   const [role, setRole] = useState("");
@@ -30,12 +34,17 @@ export default function Form2Page() {
   const [fairness, setFairness] = useState<number | null>(null);
   const [feedback, setFeedback] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [alreadySubmitted, setAlreadySubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [batchStats, setBatchStats] = useState<Record<string, { total: number; counts: Record<string, number>; percentages: Record<string, number> }>>({});
+  // Distinguishes "just submitted" from "already submitted earlier on this browser"
 
   useEffect(() => {
-    if (isSubmitted("form2")) setSubmitted(true);
+    if (isSubmitted("form2")) {
+      setSubmitted(true);
+      setAlreadySubmitted(true);
+    }
   }, []);
 
   // Preload ALL slot + question stats in one request
@@ -46,6 +55,12 @@ export default function Form2Page() {
         if (data && typeof data === "object") setBatchStats(data);
       })
       .catch(() => {});
+  }, []);
+
+  // Shuffle the two opinion rating questions on each entry; the matrix and feedback stay fixed
+  const [ratingOrder, setRatingOrder] = useState<RatingQId[]>(RATING_QUESTION_IDS);
+  useEffect(() => {
+    setRatingOrder(shuffle(RATING_QUESTION_IDS));
   }, []);
 
   const total = 11;
@@ -124,6 +139,47 @@ export default function Form2Page() {
     }
   };
 
+  if (submitted && alreadySubmitted) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-6 bg-gradient-to-b from-zinc-50 to-[#f6f5f2]">
+        <div className="w-full max-w-lg rounded-[36px] border border-zinc-200 bg-white p-8 md:p-10 text-center shadow-2xl">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-amber-100 text-amber-600 shadow-inner">
+            <ShieldCheck className="h-10 w-10 stroke-[2.5]" />
+          </div>
+          <h1 className="mt-6 text-2xl font-black text-zinc-900 tracking-tight">
+            You have already submitted this survey
+          </h1>
+          <p className="mt-3 text-sm text-zinc-500 leading-relaxed">
+            এই ব্রাউজার থেকে একবার উত্তর জমা হয়ে গেছে। গবেষণার সততার জন্য প্রতি ব্রাউজার থেকে মাত্র একটি
+            উত্তর গ্রহণ করা হয় — তাই আবার জমা দেওয়া যাবে না।
+          </p>
+          <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-xs text-amber-900">
+            <div className="flex items-center gap-2 font-bold">
+              <ShieldCheck className="h-4 w-4 text-amber-600" /> One response per browser
+            </div>
+            <p className="mt-1.5 leading-relaxed">
+              Your earlier ratings are safely recorded and counted in the live results.
+            </p>
+          </div>
+          <div className="mt-6 space-y-3">
+            <Link
+              href="/results/form2"
+              className="flex items-center justify-center gap-2 w-full rounded-2xl bg-black py-3.5 text-sm font-bold text-white shadow-lg transition hover:bg-zinc-800"
+            >
+              <BarChart3 className="h-4 w-4" /> View Live Results
+            </Link>
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-400 hover:text-zinc-600 pt-2"
+            >
+              <Home className="h-3.5 w-3.5" /> Back to Survey Home
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (submitted) {
     return (
       <div className="flex min-h-screen items-center justify-center p-6 bg-gradient-to-b from-zinc-50 to-[#f6f5f2]">
@@ -151,11 +207,18 @@ export default function Form2Page() {
 
           <div className="mt-6 space-y-3">
             <Link
+              href="/form1"
+              className="flex items-center justify-center gap-2 w-full rounded-2xl bg-violet-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-violet-500/25 transition hover:bg-violet-700"
+            >
+              <GraduationCap className="h-4 w-4" /> Now submit Form 1 (Student &amp; Teacher) →
+            </Link>
+            <Link
               href="/results/form2"
-              className="flex items-center justify-center gap-2 w-full rounded-2xl bg-black py-3.5 text-sm font-bold text-white shadow-lg transition hover:bg-zinc-800"
+              className="flex items-center justify-center gap-2 w-full rounded-2xl border-2 border-zinc-200 bg-white py-3.5 text-sm font-bold text-zinc-800 transition hover:bg-zinc-50"
             >
               <BarChart3 className="h-4 w-4" /> View Time-Slot Ranking Dashboard
             </Link>
+            {/* placeholder-removed */}
             <Link
               href="/"
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-400 hover:text-zinc-600 pt-2"
@@ -303,35 +366,38 @@ export default function Form2Page() {
           initialStats={batchStats}
         />
 
-        {/* Question 2: Long Campus Gaps */}
-        <RatingPoll
-          form="form2"
-          questionId="long_gap_rating"
-          index={2}
-          initialStats={batchStats}
-          title="2. Long Campus Gaps Between Classes (Idle Wait Time) *"
-          titleBn="মনে করুন, আপনার একটি ক্লাস সকালে এবং পরের ক্লাসটি অনেক পরে — মাঝখানে ২ ঘণ্টারও বেশি ফাঁকা সময় আছে। এই দীর্ঘ বিরতি আপনার কাছে কেমন লাগে?"
-          leftLabel="১ = একেবারেই অপছন্দ / সময়ের অপচয়"
-          rightLabel="৫ = এতে কোনো সমস্যা নেই / কাজে লাগে"
-          value={longGap}
-          onChange={setLongGap}
-          visual={<VisualLongGapForm2 />}
-        />
-
-        {/* Question 3: Multi-Semester Fairness */}
-        <RatingPoll
-          form="form2"
-          questionId="fairness_rating"
-          index={3}
-          initialStats={batchStats}
-          title="3. Multi-Semester Fairness (Algorithmic Memory) *"
-          titleBn="ধরুন, কোনো শিক্ষার্থী দল বা শিক্ষক এই সেমিস্টারে একটি খারাপ রুটিন পেলেন। এআই (AI)-এর কি এটি মনে রাখা উচিত এবং পরের সেমিস্টারে তাদের সুবিধা পুষিয়ে দেওয়ার চেষ্টা করা উচিত?"
-          leftLabel="১ = না, প্রতি সেমিস্টার আলাদা হোক"
-          rightLabel="৫ = হ্যাঁ, অবশ্যই পুষিয়ে দেওয়া উচিত"
-          value={fairness}
-          onChange={setFairness}
-          visual={<VisualFairness />}
-        />
+        {/* Questions 2 & 3: Opinion ratings — shuffled on each entry */}
+        {ratingOrder.map((qid, idx) => {
+          const isLongGap = qid === "long_gap_rating";
+          return (
+            <RatingPoll
+              key={qid}
+              form="form2"
+              questionId={qid}
+              index={2 + idx}
+              initialStats={batchStats}
+              title={
+                isLongGap
+                  ? "Long Campus Gaps Between Classes (Idle Wait Time) *"
+                  : "Multi-Semester Fairness (Algorithmic Memory) *"
+              }
+              titleBn={
+                isLongGap
+                  ? "মনে করুন, আপনার একটি ক্লাস সকালে এবং পরের ক্লাসটি অনেক পরে — মাঝখানে ২ ঘণ্টারও বেশি ফাঁকা সময় আছে। এই দীর্ঘ বিরতি আপনার কাছে কেমন লাগে?"
+                  : "ধরুন, কোনো শিক্ষার্থী দল বা শিক্ষক এই সেমিস্টারে একটি খারাপ রুটিন পেলেন। এআই (AI)-এর কি এটি মনে রাখা উচিত এবং পরের সেমিস্টারে তাদের সুবিধা পুষিয়ে দেওয়ার চেষ্টা করা উচিত?"
+              }
+              leftLabel={
+                isLongGap ? "১ = একেবারেই অপছন্দ / সময়ের অপচয়" : "১ = না, প্রতি সেমিস্টার আলাদা হোক"
+              }
+              rightLabel={
+                isLongGap ? "৫ = এতে কোনো সমস্যা নেই / কাজে লাগে" : "৫ = হ্যাঁ, অবশ্যই পুষিয়ে দেওয়া উচিত"
+              }
+              value={isLongGap ? longGap : fairness}
+              onChange={isLongGap ? setLongGap : setFairness}
+              visual={isLongGap ? <VisualLongGapForm2 /> : <VisualFairness />}
+            />
+          );
+        })}
 
         {/* Question 4: Free-text feedback */}
         <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">

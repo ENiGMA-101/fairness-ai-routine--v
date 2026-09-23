@@ -8,29 +8,9 @@ import {
   CheckCircle2,
   Users,
 } from "lucide-react";
-import { db, isDatabaseConfigured } from "@/db";
-import { form1Responses, form2Responses } from "@/db/schema";
-import { getAllForm1, getAllForm2 } from "@/lib/storage";
-
-export const dynamic = "force-dynamic";
-
-async function getStats() {
-  const configured = isDatabaseConfigured();
-  if (!configured) {
-    const f1 = getAllForm1().length;
-    const f2 = getAllForm2().length;
-    return { form1: f1, form2: f2 };
-  }
-  try {
-    const one = await db.select({ id: form1Responses.id }).from(form1Responses);
-    const two = await db.select({ id: form2Responses.id }).from(form2Responses);
-    return { form1: one.length, form2: two.length };
-  } catch {
-    const f1 = getAllForm1().length;
-    const f2 = getAllForm2().length;
-    return { form1: f1, form2: f2 };
-  }
-}
+import ResponseCounters from "@/components/ResponseCounters";
+// Fully static — no DB round-trip on navigation, so Home/back is instant.
+export const revalidate = 300;
 
 export const metadata = {
   title: "Fairness-Aware AI Routine Generator — Research Survey",
@@ -38,9 +18,8 @@ export const metadata = {
     "Participate in the University of Asia Pacific research survey on fairness-aware class routine generation. Anonymous, 2–3 minutes, live results.",
 };
 
-export default async function Home() {
-  const stats = await getStats();
 
+export default function Home() {
   return (
     <main className="min-h-screen bg-[#f6f5f2]">
       {/* Header */}
@@ -221,32 +200,8 @@ export default async function Home() {
           </div>
         </div>
 
-        {/* Aggregate response counters */}
-        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-4 border-t border-zinc-100 px-5 py-8 sm:grid-cols-3">
-          <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
-              Form 01 responses
-            </div>
-            <div className="mt-1 text-3xl font-black text-zinc-900">{stats.form1}</div>
-          </div>
-          <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
-              Form 02 responses
-            </div>
-            <div className="mt-1 text-3xl font-black text-zinc-900">{stats.form2}</div>
-          </div>
-          <Link
-            href="/results/form2"
-            className="flex flex-col justify-center rounded-2xl border border-violet-200 bg-violet-50 p-4 transition hover:border-violet-400"
-          >
-            <div className="text-[11px] font-bold uppercase tracking-wider text-violet-500">
-              Explore
-            </div>
-            <div className="mt-1 flex items-center gap-1.5 text-sm font-black text-violet-800">
-              Time-slot rankings <ArrowRight className="h-4 w-4" />
-            </div>
-          </Link>
-        </div>
+          {/* Aggregate response counters (client-side → page stays fully static & instant) */}
+          <ResponseCounters />
       </section>
 
       <footer className="border-t border-zinc-200 bg-white">

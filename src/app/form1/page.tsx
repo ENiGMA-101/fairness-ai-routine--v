@@ -17,7 +17,12 @@ import {
 import PollCard from "@/components/PollCard";
 import { FORM1_VISUALS } from "@/components/Visuals";
 import { getBrowserId, isSubmitted, markSubmitted } from "@/lib/browser";
-import { DEPARTMENTS, FORM1_QUESTIONS } from "@/lib/survey";
+import {
+  DEPARTMENTS,
+  FORM1_QUESTIONS,
+  FIXED_QUESTION_IDS,
+  orderForSurvey,
+} from "@/lib/survey";
 
 const ROLE_QUESTION = FORM1_QUESTIONS.find((q) => q.id === "role")!;
 const QUESTIONS = FORM1_QUESTIONS.filter((q) => q.id !== "role" && q.id !== "department");
@@ -31,9 +36,14 @@ export default function Form1Page() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [batchStats, setBatchStats] = useState<Record<string, { total: number; counts: Record<string, number>; percentages: Record<string, number> }>>({});
+  // Distinguishes "just submitted" from "already submitted earlier on this browser"
+  const [alreadySubmitted, setAlreadySubmitted] = useState(false);
 
   useEffect(() => {
-    if (isSubmitted("form1")) setSubmitted(true);
+    if (isSubmitted("form1")) {
+      setSubmitted(true);
+      setAlreadySubmitted(true);
+    }
   }, []);
 
   // Preload ALL question stats in one request — shows instantly when user clicks
@@ -46,9 +56,18 @@ export default function Form1Page() {
       .catch(() => {});
   }, []);
 
+  // Shuffle opinion questions on every entry; demographic questions (semester) stay fixed at top
+  const [orderedQuestions, setOrderedQuestions] = useState(() => [...QUESTIONS]);
+  useEffect(() => {
+    setOrderedQuestions(orderForSurvey(QUESTIONS));
+  }, []);
+
   const visible = useMemo(
-    () => QUESTIONS.filter((q) => (role === "" ? false : q.audience === role || q.audience === "Both")),
-    [role],
+    () =>
+      orderedQuestions.filter((q) =>
+        role === "" ? false : q.audience === role || q.audience === "Both",
+      ),
+    [role, orderedQuestions],
   );
 
   const total = useMemo(() => (role ? visible.length + 2 : 2), [role, visible.length]);
@@ -129,6 +148,47 @@ export default function Form1Page() {
     }
   };
 
+  if (submitted && alreadySubmitted) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-6 bg-gradient-to-b from-zinc-50 to-[#f6f5f2]">
+        <div className="w-full max-w-lg rounded-[36px] border border-zinc-200 bg-white p-8 md:p-10 text-center shadow-2xl">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-amber-100 text-amber-600 shadow-inner">
+            <ShieldCheck className="h-10 w-10 stroke-[2.5]" />
+          </div>
+          <h1 className="mt-6 text-2xl font-black text-zinc-900 tracking-tight">
+            You have already submitted this survey
+          </h1>
+          <p className="mt-3 text-sm text-zinc-500 leading-relaxed">
+            এই ব্রাউজার থেকে একবার উত্তর জমা হয়ে গেছে। গবেষণার সততার জন্য প্রতি ব্রাউজার থেকে মাত্র একটি
+            উত্তর গ্রহণ করা হয় — তাই আবার জমা দেওয়া যাবে না।
+          </p>
+          <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-xs text-amber-900">
+            <div className="flex items-center gap-2 font-bold">
+              <ShieldCheck className="h-4 w-4 text-amber-600" /> One response per browser
+            </div>
+            <p className="mt-1.5 leading-relaxed">
+              Thank you — your earlier response is safely recorded and counted in the live results.
+            </p>
+          </div>
+          <div className="mt-6 space-y-3">
+            <Link
+              href="/results/form1"
+              className="flex items-center justify-center gap-2 w-full rounded-2xl bg-black py-3.5 text-sm font-bold text-white shadow-lg transition hover:bg-zinc-800"
+            >
+              <BarChart3 className="h-4 w-4" /> View Live Results
+            </Link>
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-400 hover:text-zinc-600 pt-2"
+            >
+              <Home className="h-3.5 w-3.5" /> Back to Survey Home
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (submitted) {
     return (
       <div className="flex min-h-screen items-center justify-center p-6 bg-gradient-to-b from-zinc-50 to-[#f6f5f2]">
@@ -156,16 +216,16 @@ export default function Form1Page() {
 
           <div className="mt-6 space-y-3">
             <Link
-              href="/results/form1"
+              href="/form2"
               className="flex items-center justify-center gap-2 w-full rounded-2xl bg-violet-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-violet-500/25 transition hover:bg-violet-700"
             >
-              <BarChart3 className="h-4 w-4" /> View Live Form 1 Results
+              Now submit Form 2 (Time-Slot Rating) <ArrowRight className="h-4 w-4" />
             </Link>
             <Link
-              href="/form2"
+              href="/results/form1"
               className="flex items-center justify-center gap-2 w-full rounded-2xl border-2 border-zinc-200 bg-white py-3.5 text-sm font-bold text-zinc-800 transition hover:bg-zinc-50"
             >
-              Rate Time Slots (Form 2) <ArrowRight className="h-4 w-4" />
+              <BarChart3 className="h-4 w-4" /> View Live Form 1 Results
             </Link>
             <Link
               href="/"
@@ -356,6 +416,7 @@ export default function Form1Page() {
                 onChange={(v) => setAnswer(q.id, v)}
                 visual={Visual ? <Visual /> : undefined}
                 initialStats={batchStats[q.id] ?? null}
+                hideResults={FIXED_QUESTION_IDS.has(q.id)}
               />
             );
           })

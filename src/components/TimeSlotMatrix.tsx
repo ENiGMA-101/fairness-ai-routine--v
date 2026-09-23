@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Sun, Moon, Sunrise, Clock, Sparkles } from "lucide-react";
 import { TIME_SLOTS } from "@/lib/survey";
 import { useStats, type Stats } from "./PollCard";
@@ -34,6 +34,8 @@ function getSlotIcon(id: string) {
 
 export default function TimeSlotMatrix({ values, onChange, initialStats }: Props) {
   const { stats, load } = useStats("form2");
+  // Which slots THIS user has clicked — percentages hidden until then.
+  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
 
   // Preload all slot stats on mount in one background batch
   useEffect(() => {
@@ -45,6 +47,7 @@ export default function TimeSlotMatrix({ values, onChange, initialStats }: Props
 
   const select = (id: string, rating: number) => {
     onChange(id, rating);
+    setRevealed((prev: Record<string, boolean>) => ({ ...prev, [id]: true }));
     void load(id);
   };
 
@@ -87,7 +90,6 @@ export default function TimeSlotMatrix({ values, onChange, initialStats }: Props
         {TIME_SLOTS.map((slot) => {
           const current = initialStats?.[slot.id] ?? stats[slot.id];
           const chosen = values[slot.id];
-          const hasSelected = chosen !== undefined && chosen !== null;
 
           return (
             <div
@@ -129,8 +131,8 @@ export default function TimeSlotMatrix({ values, onChange, initialStats }: Props
                 </div>
               </div>
 
-              {/* Live Percentages underneath each slot — ONLY show after user clicks rating */}
-              {hasSelected && current ? (
+              {/* Live Percentages underneath each slot — only after user rates this slot */}
+              {revealed[slot.id] && current ? (
                 <div className="mt-3 pt-3 border-t border-zinc-200/60">
                   <div className="flex items-center justify-between text-[11px] text-zinc-500 mb-1.5">
                     <span className="font-semibold text-violet-700 flex items-center gap-1">

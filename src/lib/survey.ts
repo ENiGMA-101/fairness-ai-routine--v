@@ -28,6 +28,32 @@ export const DEPARTMENTS = [
 
 export const SEMESTERS = ["1.1", "1.2", "2.1", "2.2", "3.1", "3.2", "4.1", "4.2"] as const;
 
+/**
+ * Demographic / identifier questions — always shown at the top in fixed order,
+ * never shuffled. They are also not opinion polls, so the live-% reveal is hidden.
+ */
+export const FIXED_QUESTION_IDS = new Set(["role", "department", "semester"]);
+
+/**
+ * Fisher–Yates shuffle. Returns a new array; used on form entry so each visitor
+ * sees the opinion questions in a different order (results stay in canonical order).
+ */
+export function shuffle<T>(items: readonly T[]): T[] {
+  const arr = [...items];
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/** Fixed (demographic) questions first, then shuffled opinion questions. */
+export function orderForSurvey<T extends { id: string }>(questions: readonly T[]): T[] {
+  const fixed = questions.filter((q) => FIXED_QUESTION_IDS.has(q.id));
+  const shufflable = questions.filter((q) => !FIXED_QUESTION_IDS.has(q.id));
+  return [...fixed, ...shuffle(shufflable)];
+}
+
 const YES_NO: Option[] = [
   { value: "yes", label: "হ্যাঁ (Yes)" },
   { value: "no", label: "না (No)" },
