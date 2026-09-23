@@ -1,12 +1,14 @@
 "use client";
 
+import { useEffect } from "react";
 import { Sun, Moon, Sunrise, Clock, Sparkles } from "lucide-react";
 import { TIME_SLOTS } from "@/lib/survey";
-import { useStats } from "./PollCard";
+import { useStats, type Stats } from "./PollCard";
 
 type Props = {
   values: Record<string, number>;
   onChange: (id: string, rating: number) => void;
+  initialStats?: Record<string, Stats> | null;
 };
 
 const RATING_EMOJIS = [
@@ -30,8 +32,16 @@ function getSlotIcon(id: string) {
   return <Moon className="h-4 w-4 text-indigo-500" />;
 }
 
-export default function TimeSlotMatrix({ values, onChange }: Props) {
+export default function TimeSlotMatrix({ values, onChange, initialStats }: Props) {
   const { stats, load } = useStats("form2");
+
+  // Preload all slot stats on mount in one background batch
+  useEffect(() => {
+    for (const slot of TIME_SLOTS) {
+      void load(slot.id);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const select = (id: string, rating: number) => {
     onChange(id, rating);
@@ -75,8 +85,9 @@ export default function TimeSlotMatrix({ values, onChange }: Props) {
       {/* Slots List */}
       <div className="mt-3 space-y-4">
         {TIME_SLOTS.map((slot) => {
-          const current = stats[slot.id];
+          const current = initialStats?.[slot.id] ?? stats[slot.id];
           const chosen = values[slot.id];
+          const hasSelected = chosen !== undefined && chosen !== null;
 
           return (
             <div
@@ -118,8 +129,8 @@ export default function TimeSlotMatrix({ values, onChange }: Props) {
                 </div>
               </div>
 
-              {/* Live Percentages underneath each slot */}
-              {current ? (
+              {/* Live Percentages underneath each slot — ONLY show after user clicks rating */}
+              {hasSelected && current ? (
                 <div className="mt-3 pt-3 border-t border-zinc-200/60">
                   <div className="flex items-center justify-between text-[11px] text-zinc-500 mb-1.5">
                     <span className="font-semibold text-violet-700 flex items-center gap-1">

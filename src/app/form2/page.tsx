@@ -32,9 +32,20 @@ export default function Form2Page() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [batchStats, setBatchStats] = useState<Record<string, { total: number; counts: Record<string, number>; percentages: Record<string, number> }>>({});
 
   useEffect(() => {
     if (isSubmitted("form2")) setSubmitted(true);
+  }, []);
+
+  // Preload ALL slot + question stats in one request
+  useEffect(() => {
+    void fetch("/api/form2/stats/all", { cache: "no-store" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data && typeof data === "object") setBatchStats(data);
+      })
+      .catch(() => {});
   }, []);
 
   const total = 11;
@@ -289,6 +300,7 @@ export default function Form2Page() {
         <TimeSlotMatrix
           values={timeSlots}
           onChange={(id, rating) => setTimeSlots((prev) => ({ ...prev, [id]: rating }))}
+          initialStats={batchStats}
         />
 
         {/* Question 2: Long Campus Gaps */}
@@ -296,6 +308,7 @@ export default function Form2Page() {
           form="form2"
           questionId="long_gap_rating"
           index={2}
+          initialStats={batchStats}
           title="2. Long Campus Gaps Between Classes (Idle Wait Time) *"
           titleBn="মনে করুন, আপনার একটি ক্লাস সকালে এবং পরের ক্লাসটি অনেক পরে — মাঝখানে ২ ঘণ্টারও বেশি ফাঁকা সময় আছে। এই দীর্ঘ বিরতি আপনার কাছে কেমন লাগে?"
           leftLabel="১ = একেবারেই অপছন্দ / সময়ের অপচয়"
@@ -310,6 +323,7 @@ export default function Form2Page() {
           form="form2"
           questionId="fairness_rating"
           index={3}
+          initialStats={batchStats}
           title="3. Multi-Semester Fairness (Algorithmic Memory) *"
           titleBn="ধরুন, কোনো শিক্ষার্থী দল বা শিক্ষক এই সেমিস্টারে একটি খারাপ রুটিন পেলেন। এআই (AI)-এর কি এটি মনে রাখা উচিত এবং পরের সেমিস্টারে তাদের সুবিধা পুষিয়ে দেওয়ার চেষ্টা করা উচিত?"
           leftLabel="১ = না, প্রতি সেমিস্টার আলাদা হোক"

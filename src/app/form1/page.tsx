@@ -30,9 +30,20 @@ export default function Form1Page() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [batchStats, setBatchStats] = useState<Record<string, { total: number; counts: Record<string, number>; percentages: Record<string, number> }>>({});
 
   useEffect(() => {
     if (isSubmitted("form1")) setSubmitted(true);
+  }, []);
+
+  // Preload ALL question stats in one request — shows instantly when user clicks
+  useEffect(() => {
+    void fetch("/api/form1/stats/all", { cache: "no-store" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data && typeof data === "object") setBatchStats(data);
+      })
+      .catch(() => {});
   }, []);
 
   const visible = useMemo(
@@ -344,6 +355,7 @@ export default function Form1Page() {
                 value={answers[q.id] ?? null}
                 onChange={(v) => setAnswer(q.id, v)}
                 visual={Visual ? <Visual /> : undefined}
+                initialStats={batchStats[q.id] ?? null}
               />
             );
           })
