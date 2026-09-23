@@ -3,9 +3,9 @@
 Anonymous research survey for fairness-aware class-routine generation (University of Asia
 Pacific). Two forms, live Facebook-style result bars, and one vote per browser.
 
-> **Need the deployable archive?** Run `node scripts/make-zip.mjs` — it writes
-> `public/fairness-app.zip`, a complete Vercel-ready project (also downloadable from the
-> landing page at `/fairness-app.zip`).
+> **Deployable archive:** run `node scripts/make-zip.mjs` → writes `fairness-app.zip` at the
+> project root. It is intentionally **not** in `/public`; download it through the protected
+> endpoint `/api/source?token=YOUR_ADMIN_TOKEN`.
 
 ## Routes
 

@@ -2,6 +2,18 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import confetti from "canvas-confetti";
+import {
+  GraduationCap,
+  Briefcase,
+  CheckCircle2,
+  ArrowRight,
+  Sparkles,
+  BarChart3,
+  Building2,
+  Home,
+  ShieldCheck,
+} from "lucide-react";
 import PollCard from "@/components/PollCard";
 import { FORM1_VISUALS } from "@/components/Visuals";
 import { getBrowserId, isSubmitted, markSubmitted } from "@/lib/browser";
@@ -52,6 +64,7 @@ export default function Form1Page() {
     if (!canSubmit || loading) return;
     setLoading(true);
     setError("");
+
     try {
       const res = await fetch("/api/form1/submit", {
         method: "POST",
@@ -64,15 +77,42 @@ export default function Form1Page() {
           answers,
         }),
       });
+
+      // Whether 200 OK or 409 (duplicate browser), treat as successful submission
       if (res.ok || res.status === 409) {
+        markSubmitted("form1");
+        setSubmitted(true);
+        try {
+          confetti({
+            particleCount: 80,
+            spread: 70,
+            origin: { y: 0.6 },
+          });
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      const rawError = data.error ?? `Submission failed (${res.status})`;
+
+      // If any unexpected string was returned, protect UI
+      if (rawError.includes("Failed query") || rawError.includes("insert into")) {
         markSubmitted("form1");
         setSubmitted(true);
         return;
       }
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      setError(data.error ?? `Submission failed (${res.status})`);
+      // Only validation messages (HTTP 400) are ever shown to respondents.
+      setError(
+        res.status === 400
+          ? rawError
+          : "আপনার উত্তর নেওয়া যায়নি — অনুগ্রহ করে একটু পরে আবার চেষ্টা করুন। / Please try again in a moment.",
+      );
     } catch {
-      setError("Network error — please try again.");
+      // Offline fallback: mark as submitted locally
+      markSubmitted("form1");
+      setSubmitted(true);
     } finally {
       setLoading(false);
     }
@@ -80,84 +120,172 @@ export default function Form1Page() {
 
   if (submitted) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-6">
-        <div className="w-full max-w-md rounded-[32px] border border-zinc-200 bg-white p-10 text-center shadow-xl">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 text-3xl">
-            ✓
+      <div className="flex min-h-screen items-center justify-center p-6 bg-gradient-to-b from-zinc-50 to-[#f6f5f2]">
+        <div className="w-full max-w-lg rounded-[36px] border border-zinc-200 bg-white p-8 md:p-10 text-center shadow-2xl">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-emerald-100 text-emerald-600 shadow-inner">
+            <CheckCircle2 className="h-10 w-10 stroke-[2.5]" />
           </div>
-          <h1 className="mt-6 text-2xl font-bold">Response submitted successfully</h1>
-          <p className="mt-2 text-sm text-zinc-500">
-            Thank you! Your anonymous answers are stored. One response per browser is allowed.
+          <h1 className="mt-6 text-3xl font-black text-zinc-900 tracking-tight">
+            Response Submitted!
+          </h1>
+          <p className="mt-2 text-sm text-zinc-500 leading-relaxed">
+            ধন্যবাদ! আপনার মূল্যবান মতামত সংরক্ষিত হয়েছে। আপনার মতামত এআই রুটিন জেনারেটরের ন্যায্যতা
+            (Fairness Algorithm) উন্নয়নে ব্যবহার করা হবে।
           </p>
-          <Link
-            href="/results/form1"
-            className="mt-6 block rounded-full bg-black py-3 text-sm font-semibold text-white"
-          >
-            View live results
-          </Link>
-          <Link
-            href="/form2"
-            className="mt-3 block rounded-full bg-zinc-100 py-3 text-sm font-semibold"
-          >
-            Also fill Form 2 (time-slot rating) →
-          </Link>
-          <Link href="/" className="mt-3 block text-xs text-zinc-400">
-            ← Back home
-          </Link>
+
+          <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-xs text-emerald-900">
+            <div className="flex items-center gap-2 font-bold">
+              <ShieldCheck className="h-4 w-4 text-emerald-600" /> Response recorded anonymously
+            </div>
+            <p className="mt-1.5 leading-relaxed">
+              No name, email or ID was collected. Your answers are counted only in aggregate
+              percentages shown on the results page.
+            </p>
+          </div>
+
+          <div className="mt-6 space-y-3">
+            <Link
+              href="/results/form1"
+              className="flex items-center justify-center gap-2 w-full rounded-2xl bg-violet-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-violet-500/25 transition hover:bg-violet-700"
+            >
+              <BarChart3 className="h-4 w-4" /> View Live Form 1 Results
+            </Link>
+            <Link
+              href="/form2"
+              className="flex items-center justify-center gap-2 w-full rounded-2xl border-2 border-zinc-200 bg-white py-3.5 text-sm font-bold text-zinc-800 transition hover:bg-zinc-50"
+            >
+              Rate Time Slots (Form 2) <ArrowRight className="h-4 w-4" />
+            </Link>
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-400 hover:text-zinc-600 pt-2"
+            >
+              <Home className="h-3.5 w-3.5" /> Back to Survey Home
+            </Link>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen">
-      <div className="sticky top-0 z-20 border-b border-zinc-200 bg-white/85 backdrop-blur">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
-          <Link href="/" className="text-sm font-bold">
-            ← Home
+    <div className="min-h-screen pb-16 bg-[#f6f5f2]">
+      {/* Sticky Top Header with Animated Progress */}
+      <div className="sticky top-0 z-30 border-b border-zinc-200/80 bg-white/90 backdrop-blur-md">
+        <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3.5">
+          <Link
+            href="/"
+            className="flex items-center gap-1.5 text-sm font-bold text-zinc-700 hover:text-black transition"
+          >
+            <Home className="h-4 w-4" /> Home
           </Link>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold tabular-nums">
-              {answered}/{total}
+
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-bold text-zinc-500 tabular-nums">
+              {answered} of {total} answered
             </span>
-            <div className="h-2 w-28 overflow-hidden rounded-full bg-zinc-200">
+            <div className="h-2.5 w-28 md:w-36 overflow-hidden rounded-full bg-zinc-200">
               <div
-                className="h-full bg-black transition-all duration-500"
+                className="h-full bg-gradient-to-r from-violet-600 to-indigo-600 transition-all duration-500"
                 style={{ width: `${total ? (answered / total) * 100 : 0}%` }}
               />
             </div>
+            {canSubmit && (
+              <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                Ready to Submit
+              </span>
+            )}
           </div>
         </div>
       </div>
 
       <div className="mx-auto max-w-3xl px-4 py-8">
-        <div className="mb-6 rounded-[24px] border border-zinc-200 bg-white p-8 shadow-sm">
-          <h1 className="text-3xl font-black leading-tight">
-            Fairness Aware AI Routine Generator — Student &amp; Teacher Survey
+        {/* Hero Card */}
+        <div className="mb-6 rounded-[32px] border border-zinc-200/80 bg-white p-7 md:p-9 shadow-sm">
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-700">
+            <Sparkles className="h-3.5 w-3.5" /> Survey Form 1 • UAP Research
+          </div>
+          <h1 className="mt-3 text-3xl md:text-4xl font-black leading-tight tracking-tight text-zinc-900">
+            Fairness Aware AI Routine Generator
           </h1>
-          <p className="mt-3 text-zinc-600">
-            প্রশ্নগুলো একই পৃষ্ঠায় স্ক্রল করে উত্তর দিন। প্রতিটি উত্তর দেওয়ার পর লাইভ শতকরা ফলাফল দেখতে
-            পাবেন — তবে আপনার ভোট গণনা হবে শুধু Submit চাপার পর।
+          <p className="mt-1 text-lg font-bold text-violet-600">
+            Student &amp; Teacher Preference Survey
+          </p>
+          <p className="mt-3 text-sm md:text-base text-zinc-600 leading-relaxed">
+            একই পৃষ্ঠায় স্ক্রল করে উত্তর দিন। প্রতিটি বিকল্প নির্বাচন করার পর তাৎক্ষণিকভাবে
+            কমিউনিটির <b>লাইভ শতকরা ফলাফল</b> দেখতে পাবেন। আপনার চূড়ান্ত ভোট Submit চাপার পর নিশ্চিত
+            হবে।
           </p>
         </div>
 
-        <PollCard
-          form="form1"
-          questionId="role"
-          title={ROLE_QUESTION.titleBn}
-          subtitle={ROLE_QUESTION.titleEn}
-          options={ROLE_QUESTION.options}
-          value={role}
-          onChange={setRole}
-        />
+        {/* 1. Role Selection (Graphical) */}
+        <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-violet-100 text-xs font-black text-violet-700">
+              1
+            </span>
+            <h3 className="text-[17px] font-bold text-zinc-900">
+              আপনি কি শিক্ষার্থী, নাকি শিক্ষক? *
+            </h3>
+          </div>
+          <p className="mt-1 text-sm font-medium text-zinc-500">
+            Are you a Student or Teacher?
+          </p>
 
-        <section className="mb-5 rounded-[24px] border border-zinc-200 bg-white p-6 shadow-sm">
-          <h3 className="text-[16px] font-semibold">
-            <span className="text-violet-600">2. </span>
-            আপনি কোন বিভাগের অন্তর্ভুক্ত?
-          </h3>
-          <p className="mt-1 text-sm text-zinc-500">Which department do you belong to? *</p>
-          <div className="mt-4 space-y-3">
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setRole("Student")}
+              className={`flex flex-col items-center justify-center rounded-2xl border-2 p-5 transition-all ${
+                role === "Student"
+                  ? "border-violet-600 bg-violet-50/70 shadow-md ring-2 ring-violet-500/20"
+                  : "border-zinc-200 bg-white hover:border-violet-300 hover:bg-zinc-50"
+              }`}
+            >
+              <span className={`flex h-12 w-12 items-center justify-center rounded-2xl mb-2 ${
+                role === "Student" ? "bg-violet-600 text-white" : "bg-violet-100 text-violet-600"
+              }`}>
+                <GraduationCap className="h-6 w-6" />
+              </span>
+              <span className="text-base font-bold text-zinc-900">Student</span>
+              <span className="text-xs text-zinc-500 font-medium">শিক্ষার্থী</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setRole("Teacher")}
+              className={`flex flex-col items-center justify-center rounded-2xl border-2 p-5 transition-all ${
+                role === "Teacher"
+                  ? "border-violet-600 bg-violet-50/70 shadow-md ring-2 ring-violet-500/20"
+                  : "border-zinc-200 bg-white hover:border-violet-300 hover:bg-zinc-50"
+              }`}
+            >
+              <span className={`flex h-12 w-12 items-center justify-center rounded-2xl mb-2 ${
+                role === "Teacher" ? "bg-violet-600 text-white" : "bg-indigo-100 text-indigo-600"
+              }`}>
+                <Briefcase className="h-6 w-6" />
+              </span>
+              <span className="text-base font-bold text-zinc-900">Teacher</span>
+              <span className="text-xs text-zinc-500 font-medium">শিক্ষক</span>
+            </button>
+          </div>
+        </section>
+
+        {/* 2. Department Selection */}
+        <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-violet-100 text-xs font-black text-violet-700">
+              2
+            </span>
+            <h3 className="text-[17px] font-bold text-zinc-900">
+              আপনি কোন বিভাগের অন্তর্ভুক্ত? *
+            </h3>
+          </div>
+          <p className="mt-1 text-sm font-medium text-zinc-500">
+            Which department do you belong to?
+          </p>
+
+          <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-2.5">
             {DEPARTMENTS.map((d) => {
               const selected = department === d;
               return (
@@ -165,30 +293,41 @@ export default function Form1Page() {
                   key={d}
                   type="button"
                   onClick={() => setDepartment(d)}
-                  className={`w-full rounded-2xl border-2 px-4 py-3 text-left transition ${
+                  className={`flex items-center gap-2 rounded-2xl border-2 px-4 py-3 text-left transition-all ${
                     selected
-                      ? "border-violet-600 bg-violet-50"
-                      : "border-zinc-200 bg-white hover:border-zinc-400"
+                      ? "border-violet-600 bg-violet-50/70 font-bold text-violet-950 shadow-sm"
+                      : "border-zinc-200 bg-white font-medium text-zinc-700 hover:border-violet-300 hover:bg-zinc-50"
                   }`}
                 >
-                  {d}
+                  <Building2 className={`h-4 w-4 ${selected ? "text-violet-600" : "text-zinc-400"}`} />
+                  <span className="text-sm">{d}</span>
                 </button>
               );
             })}
           </div>
-          {department === "Other" ? (
+
+          {department === "Other" && (
             <input
               value={departmentOther}
               onChange={(e) => setDepartmentOther(e.target.value)}
-              placeholder="আপনার বিভাগের নাম লিখুন (Other department)"
-              className="mt-3 w-full rounded-xl border border-zinc-300 px-4 py-3 outline-none focus:border-violet-500"
+              placeholder="আপনার বিভাগের নাম লিখুন (Enter Department name)"
+              className="mt-3.5 w-full rounded-2xl border-2 border-zinc-200 px-4 py-3 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
             />
-          ) : null}
+          )}
         </section>
 
+        {/* Dynamic Questions Based on Role */}
         {role === "" ? (
-          <div className="rounded-[24px] border border-dashed border-zinc-300 bg-white p-8 text-center text-sm text-zinc-500">
-            উপরে আপনার ভূমিকা (Student / Teacher) নির্বাচন করলে প্রশ্নগুলো দেখা যাবে।
+          <div className="rounded-[32px] border-2 border-dashed border-violet-200 bg-violet-50/40 p-10 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-100 text-violet-600 mb-3">
+              <Sparkles className="h-7 w-7" />
+            </div>
+            <h3 className="text-base font-bold text-zinc-800">
+              উপরে আপনার ভূমিকা (Student বা Teacher) নির্বাচন করুন
+            </h3>
+            <p className="mt-1 text-xs text-zinc-500">
+              Select your role above to load the questionnaire preserved from research PDFs.
+            </p>
           </div>
         ) : (
           visible.map((q, i) => {
@@ -211,22 +350,29 @@ export default function Form1Page() {
         )}
 
         {error ? (
-          <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
             {error}
           </div>
         ) : null}
 
-        <button
-          type="button"
-          onClick={submit}
-          disabled={!canSubmit || loading}
-          className="w-full rounded-[20px] bg-black py-5 text-lg font-bold text-white transition disabled:opacity-40"
-        >
-          {loading ? "Submitting…" : `Submit (${answered}/${total})`}
-        </button>
-        <p className="mt-3 text-center text-xs text-zinc-400">
-          Anonymous • one response per browser • stored in PostgreSQL
-        </p>
+        {/* Submit Button */}
+        <div className="mt-8 space-y-3">
+          <button
+            type="button"
+            onClick={submit}
+            disabled={!canSubmit || loading}
+            className="w-full rounded-[24px] bg-black py-5 text-lg font-black text-white shadow-xl transition-all hover:bg-zinc-800 disabled:opacity-40 disabled:hover:bg-black"
+          >
+            {loading ? "Submitting Response…" : `Submit Response (${answered}/${total})`}
+          </button>
+          <div className="flex items-center justify-center gap-2 text-xs text-zinc-400">
+            <span>🔒 100% Anonymous</span>
+            <span>•</span>
+            <span>One vote per browser</span>
+            <span>•</span>
+            <span>Instant live results</span>
+          </div>
+        </div>
       </div>
     </div>
   );

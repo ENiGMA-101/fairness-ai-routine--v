@@ -11,7 +11,10 @@ import { join } from "node:path";
 const root = process.cwd();
 const staging = join(root, ".zip-staging");
 const appDir = join(staging, "fairness-app");
-const outZip = join(root, "public", "fairness-app.zip");
+// Kept at the project root — never inside /public, so the source is not
+// publicly downloadable. It is served through /api/source (admin token).
+const outZip = join(root, "fairness-app.zip");
+const legacyPublicZip = join(root, "public", "fairness-app.zip");
 
 const copyIfPresent = (rel) => {
   const from = join(root, rel);
@@ -109,11 +112,11 @@ if (existsSync(pagePath)) {
 }
 
 // --- archive ---------------------------------------------------------------
-mkdirSync(join(root, "public"), { recursive: true });
 rmSync(outZip, { force: true });
+rmSync(legacyPublicZip, { force: true }); // never leave a public source zip
 execSync(`zip -qr "${outZip}" fairness-app`, { cwd: staging, stdio: "inherit" });
 
 const kb = Math.round(statSync(outZip).size / 1024);
-console.log(`✅ public/fairness-app.zip created (${kb} KB)`);
+console.log(`✅ fairness-app.zip created (${kb} KB) — served via /api/source?token=…`);
 
 rmSync(staging, { recursive: true, force: true });

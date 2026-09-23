@@ -7,6 +7,7 @@ const globalForDb = globalThis as typeof globalThis & {
   __fairnessPool?: Pool;
   __fairnessDb?: Db;
   __tablesInitPromise?: Promise<void>;
+  __fairnessDbBrokenAt?: number;
 };
 
 export function getDatabaseUrl(): string | undefined {
@@ -21,16 +22,15 @@ export function getDatabaseUrl(): string | undefined {
 }
 
 export function isDatabaseConfigured(): boolean {
-  return Boolean(getDatabaseUrl());
+  const url = getDatabaseUrl();
+  return Boolean(url && url.trim().length > 0 && !url.includes("xxx.supabase.co"));
 }
 
 export function getPool(): Pool {
   if (!globalForDb.__fairnessPool) {
     const url = getDatabaseUrl();
     if (!url) {
-      throw new Error(
-        "DATABASE_URL is not set. Please add DATABASE_URL or POSTGRES_URL in your Vercel project settings (Environment Variables).",
-      );
+      throw new Error("DATABASE_URL is not configured.");
     }
 
     const isLocal = url.includes("localhost") || url.includes("127.0.0.1");
@@ -38,9 +38,9 @@ export function getPool(): Pool {
     globalForDb.__fairnessPool = new Pool({
       connectionString: url,
       ssl: isLocal ? false : { rejectUnauthorized: false },
-      max: 10,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000,
+      max: 5,
+      idleTimeoutMillis: 20000,
+      connectionTimeoutMillis: 5000,
     });
   }
   return globalForDb.__fairnessPool;
@@ -51,6 +51,46 @@ export function getDb(): Db {
     globalForDb.__fairnessDb = drizzle(getPool());
   }
   return globalForDb.__fairnessDb;
+}
+
+const BROKEN_RETRY_MS = 30_000;
+
+/**
+ * If the configured database is unreachable (bad credentials, SSL, firewall…),
+ * remember it for a short while so the app falls back to built-in storage
+ * instantly instead of waiting for a connection timeout on every request.
+ */
+export function markDatabaseBroken(message: string): void {
+  if (isConnectionError(message)) {
+    globalForDb.__fairnessDbBrokenAt = Date.now();
+  }
+}
+
+export function isDatabaseMarkedBroken(): boolean {
+  const at = globalForDb.__fairnessDbBrokenAt;
+  if (!at) return false;
+  if (Date.now() - at > BROKEN_RETRY_MS) {
+    globalForDb.__fairnessDbBrokenAt = undefined; // allow one retry
+    return false;
+  }
+  return true;
+}
+
+function isConnectionError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return [
+    "econnrefused",
+    "connection",
+    "timeout",
+    "password authentication",
+    "ssl",
+    "could not connect",
+    "network",
+    "enotfound",
+    "terminated",
+    "database_unavailable",
+    "too many connections",
+  ].some((needle) => lower.includes(needle));
 }
 
 export const DDL_SCHEMA = `
@@ -104,11 +144,15 @@ CREATE TABLE IF NOT EXISTS form2_responses (
 `;
 
 /**
- * Automatically creates tables in PostgreSQL if they don't exist yet.
- * Runs once idempotently, self-healing any new or unmigrated database.
+ * Safely and idempotently creates tables if connected to a real Postgres database.
+ * If connection fails, throws so caller can seamlessly fallback to local storage.
  */
 export async function ensureTablesExist(): Promise<void> {
   if (!isDatabaseConfigured()) return;
+
+  if (isDatabaseMarkedBroken()) {
+    throw new Error("database_unavailable");
+  }
 
   if (!globalForDb.__tablesInitPromise) {
     globalForDb.__tablesInitPromise = (async () => {
@@ -116,8 +160,8 @@ export async function ensureTablesExist(): Promise<void> {
         const poolInstance = getPool();
         await poolInstance.query(DDL_SCHEMA);
       } catch (err) {
-        // Clear cached promise on failure so next call can retry
         globalForDb.__tablesInitPromise = undefined;
+        markDatabaseBroken(err instanceof Error ? err.message : String(err));
         throw err;
       }
     })();
@@ -126,8 +170,7 @@ export async function ensureTablesExist(): Promise<void> {
 }
 
 /**
- * Lazy proxies: importing this module never throws, so `next build` succeeds even
- * before DATABASE_URL is configured. The real pool is created on first query.
+ * Lazy proxies so importing this module never throws during Next.js builds.
  */
 export const pool: Pool = new Proxy({} as Pool, {
   get(_target, prop) {

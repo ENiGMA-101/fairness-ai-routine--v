@@ -1,6 +1,10 @@
 {
   "/api/form1/stats/route": "app/api/form1/stats/route.js",
   "/api/form1/submit/route": "app/api/form1/submit/route.js",
+  "/api/form2/stats/route": "app/api/form2/stats/route.js",
+  "/api/form2/submit/route": "app/api/form2/submit/route.js",
   "/form1/page": "app/form1/page.js",
-  "/page": "app/page.js"
+  "/form2/page": "app/form2/page.js",
+  "/page": "app/page.js",
+  "/results/form1/page": "app/results/form1/page.js"
 }

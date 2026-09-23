@@ -17,13 +17,13 @@ export default async function Form1ResultsPage() {
   return (
     <main className="mx-auto max-w-5xl px-5 py-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link href="/" className="text-sm font-semibold text-zinc-600">
+        <Link href="/" className="text-sm font-semibold text-zinc-600 hover:text-black">
           ← Home
         </Link>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Link
             href="/results/form2"
-            className="rounded-full border border-zinc-300 bg-white px-4 py-2 text-xs font-semibold text-zinc-700"
+            className="rounded-full border border-zinc-300 bg-white px-4 py-2 text-xs font-semibold text-zinc-700 hover:border-zinc-500"
           >
             Form 2 results →
           </Link>
@@ -31,14 +31,23 @@ export default async function Form1ResultsPage() {
         </div>
       </div>
 
-      <h1 className="mt-6 text-3xl font-black">Form 1 — live results</h1>
-      <p className="mt-2 text-zinc-600">
-        Student &amp; teacher preference survey. Bars update as new responses arrive.
-      </p>
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-black">Form 1 — live results</h1>
+          <p className="mt-1 text-zinc-600">
+            Student &amp; teacher preference survey. Real-time distribution bars for all PDF questions.
+          </p>
+        </div>
+        {data?.isFallback && (
+          <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
+            ✔ Zero-Config Storage Active
+          </span>
+        )}
+      </div>
 
       {error ? (
         <div className="mt-8 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
-          Could not read from the database: {error}
+          {error}
         </div>
       ) : null}
 

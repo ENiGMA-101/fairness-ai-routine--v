@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { db, ensureTablesExist, isDatabaseConfigured } from "@/db";
+import { db, ensureTablesExist, isDatabaseConfigured, markDatabaseBroken } from "@/db";
 import { form1Responses } from "@/db/schema";
+import { addForm1Response } from "@/lib/storage";
 import { FORM1_COLUMN_KEYS, DEPARTMENTS, SEMESTERS } from "@/lib/survey";
 
 export const dynamic = "force-dynamic";
@@ -105,58 +106,66 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Semester is required for students" }, { status: 400 });
   }
 
-  if (!isDatabaseConfigured()) {
-    return NextResponse.json(
-      {
-        error:
-          "Database not connected. Please add DATABASE_URL or POSTGRES_URL in Vercel Settings > Environment Variables (or visit /setup for the 1-click guide).",
-      },
-      { status: 500 },
-    );
-  }
-
-  const doInsert = async () => {
-    return await db
-      .insert(form1Responses)
-      .values(values as typeof form1Responses.$inferInsert)
-      .onConflictDoNothing({ target: form1Responses.browserId })
-      .returning({ id: form1Responses.id });
+  // Prepared data object for fallback / local storage
+  const storagePayload = {
+    browserId,
+    role,
+    department,
+    departmentOther,
+    semester: values.semester ?? null,
+    qAvoid: values.qAvoid ?? null,
+    qWeeklyOff: values.qWeeklyOff ?? null,
+    qBetweenClasses: values.qBetweenClasses ?? null,
+    qExtraTime: values.qExtraTime ?? null,
+    qLongGap: values.qLongGap ?? null,
+    qMiddayBreak: values.qMiddayBreak ?? null,
+    qMaxHours: values.qMaxHours ?? null,
+    qLabCap: values.qLabCap ?? null,
+    qPriorityGroup: values.qPriorityGroup ?? null,
+    qConflictStudent: values.qConflictStudent ?? null,
+    qTeachingSchedule: values.qTeachingSchedule ?? null,
+    qZeroDay: values.qZeroDay ?? null,
+    qConsecutive: values.qConsecutive ?? null,
+    qGapPref: values.qGapPref ?? null,
+    qFacultyConflict: values.qFacultyConflict ?? null,
+    qCompensate: values.qCompensate ?? null,
+    qConflictTeacher: values.qConflictTeacher ?? null,
   };
 
-  try {
-    await ensureTablesExist();
-    const inserted = await doInsert();
+  // Try PostgreSQL if configured
+  if (isDatabaseConfigured()) {
+    try {
+      await ensureTablesExist();
+      const inserted = await db
+        .insert(form1Responses)
+        .values(values as typeof form1Responses.$inferInsert)
+        .onConflictDoNothing({ target: form1Responses.browserId })
+        .returning({ id: form1Responses.id });
 
-    if (!inserted.length) {
-      return NextResponse.json({ error: "duplicate", duplicate: true }, { status: 409 });
-    }
-    return NextResponse.json({ ok: true, id: inserted[0].id });
-  } catch (error) {
-    const rawMessage = error instanceof Error ? error.message : String(error);
-    if (rawMessage.includes("relation") && rawMessage.includes("does not exist")) {
-      try {
-        await ensureTablesExist();
-        const retryInserted = await doInsert();
-        if (!retryInserted.length) {
-          return NextResponse.json({ error: "duplicate", duplicate: true }, { status: 409 });
-        }
-        return NextResponse.json({ ok: true, id: retryInserted[0].id });
-      } catch (retryError) {
-        const retryMsg = retryError instanceof Error ? retryError.message : String(retryError);
-        return NextResponse.json(
-          { error: `Database table error: ${retryMsg}. Visit /setup to initialize tables.` },
-          { status: 500 },
-        );
+      if (!inserted.length) {
+        return NextResponse.json({ error: "duplicate", duplicate: true }, { status: 409 });
       }
-    }
 
-    if (rawMessage.includes("password authentication failed") || rawMessage.includes("connect ECONNREFUSED")) {
-      return NextResponse.json(
-        { error: "Database connection failed. Please verify your DATABASE_URL credentials." },
-        { status: 500 },
-      );
+      // Mirror to storage as backup
+      addForm1Response(storagePayload);
+      return NextResponse.json({ ok: true, id: inserted[0].id, storage: "database" });
+    } catch (pgError) {
+      console.warn("PostgreSQL insert failed, using fallback storage:", pgError);
+      markDatabaseBroken(pgError instanceof Error ? pgError.message : String(pgError));
+      // Seamlessly fall through to local fallback storage!
     }
-
-    return NextResponse.json({ error: `Database error: ${rawMessage}` }, { status: 500 });
   }
+
+  // Fallback storage (works with ZERO database configured!)
+  const localResult = addForm1Response(storagePayload);
+  if (!localResult.ok && localResult.duplicate) {
+    return NextResponse.json({ error: "duplicate", duplicate: true }, { status: 409 });
+  }
+
+  return NextResponse.json({
+    ok: true,
+    id: localResult.id,
+    storage: "local_fallback",
+    note: "Stored successfully without requiring an external database.",
+  });
 }

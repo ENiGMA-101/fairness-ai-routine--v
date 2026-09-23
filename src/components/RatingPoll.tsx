@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { Sparkles } from "lucide-react";
 import { useStats } from "./PollCard";
 
 type Props = {
@@ -13,7 +14,16 @@ type Props = {
   value: number | null;
   onChange: (rating: number) => void;
   visual?: ReactNode;
+  index?: number;
 };
+
+const RATING_DESCRIPTIONS = [
+  { n: 1, emoji: "😡", desc: "Strongly against" },
+  { n: 2, emoji: "🙁", desc: "Prefer not" },
+  { n: 3, emoji: "😐", desc: "Neutral" },
+  { n: 4, emoji: "🙂", desc: "Good idea" },
+  { n: 5, emoji: "🤩", desc: "Strongly support" },
+];
 
 export default function RatingPoll({
   form,
@@ -25,6 +35,7 @@ export default function RatingPoll({
   value,
   onChange,
   visual,
+  index,
 }: Props) {
   const { stats, load } = useStats(form);
   const current = stats[questionId];
@@ -35,52 +46,79 @@ export default function RatingPoll({
   };
 
   return (
-    <section className="mb-5 rounded-[24px] border border-zinc-200 bg-white p-6 shadow-sm">
-      {visual ? <div className="mb-4">{visual}</div> : null}
-      {title ? <h3 className="text-[16px] font-semibold text-zinc-900">{title}</h3> : null}
-      {titleBn ? <p className="mt-2 text-[15px] leading-relaxed text-zinc-700">{titleBn}</p> : null}
+    <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm transition-all hover:shadow-md">
+      {visual ? <div className="mb-5">{visual}</div> : null}
 
-      <div className="mt-5 grid grid-cols-5 gap-2">
-        {[1, 2, 3, 4, 5].map((n) => {
-          const active = value === n;
+      <div className="flex items-start gap-3">
+        {index ? (
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-xs font-black text-violet-700">
+            {index}
+          </span>
+        ) : null}
+        <div className="flex-1">
+          {title ? (
+            <h3 className="text-[17px] font-bold leading-snug text-zinc-900">{title}</h3>
+          ) : null}
+          {titleBn ? (
+            <p className="mt-1.5 text-[15px] leading-relaxed text-zinc-700 font-medium">{titleBn}</p>
+          ) : null}
+        </div>
+      </div>
+
+      {/* 1-5 Button Grid */}
+      <div className="mt-6 grid grid-cols-5 gap-2">
+        {RATING_DESCRIPTIONS.map((item) => {
+          const active = value === item.n;
           return (
             <button
-              key={n}
+              key={item.n}
               type="button"
-              onClick={() => select(n)}
-              className={`rounded-xl border-2 py-3 text-base font-bold transition ${
+              onClick={() => select(item.n)}
+              className={`flex flex-col items-center justify-center rounded-2xl border-2 py-3.5 transition-all ${
                 active
-                  ? "border-violet-600 bg-violet-50 text-violet-700"
-                  : "border-zinc-200 text-zinc-500 hover:border-zinc-400"
+                  ? "border-violet-600 bg-violet-600 text-white shadow-lg scale-[1.04]"
+                  : "border-zinc-200 bg-white text-zinc-700 hover:border-violet-300 hover:bg-violet-50/30"
               }`}
             >
-              {n}
+              <span className="text-xl sm:text-2xl">{item.emoji}</span>
+              <span className="mt-1 text-sm font-black">{item.n}</span>
             </button>
           );
         })}
       </div>
-      <div className="mt-2 flex justify-between gap-4 text-xs text-zinc-500">
-        <span className="max-w-[48%]">{leftLabel}</span>
-        <span className="max-w-[48%] text-right">{rightLabel}</span>
+
+      {/* End labels */}
+      <div className="mt-3 flex justify-between gap-4 text-xs font-medium text-zinc-500">
+        <span className="max-w-[48%] rounded-lg bg-zinc-100 p-1.5 text-zinc-700">{leftLabel}</span>
+        <span className="max-w-[48%] text-right rounded-lg bg-zinc-100 p-1.5 text-zinc-700">
+          {rightLabel}
+        </span>
       </div>
 
+      {/* Live Distribution */}
       {current ? (
-        <div className="mt-5 space-y-1.5">
+        <div className="mt-5 space-y-2 rounded-2xl bg-zinc-50 p-4 border border-zinc-200">
+          <div className="flex items-center justify-between text-xs text-zinc-500 mb-1">
+            <span className="font-bold text-violet-700 flex items-center gap-1">
+              <Sparkles className="h-3.5 w-3.5" /> Live community votes
+            </span>
+            <span>{current.total} response{current.total === 1 ? "" : "s"}</span>
+          </div>
           {[1, 2, 3, 4, 5].map((n) => {
             const pct = current.percentages?.[String(n)] ?? 0;
             return (
-              <div key={n} className="flex items-center gap-2 text-xs">
-                <span className="w-4 text-zinc-500">{n}</span>
-                <div className="h-2 flex-1 overflow-hidden rounded-full bg-zinc-100">
-                  <div className="h-full rounded-full bg-violet-500" style={{ width: `${pct}%` }} />
+              <div key={n} className="flex items-center gap-2.5 text-xs">
+                <span className="w-5 font-bold text-zinc-600">{n} ★</span>
+                <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-zinc-200">
+                  <div
+                    className="h-full rounded-full bg-violet-600 transition-all duration-500"
+                    style={{ width: `${pct}%` }}
+                  />
                 </div>
-                <span className="w-10 text-right font-semibold text-zinc-700">{pct}%</span>
+                <span className="w-10 text-right font-black text-zinc-800">{pct}%</span>
               </div>
             );
           })}
-          <div className="pt-1 text-xs text-zinc-400">
-            {current.total} response{current.total === 1 ? "" : "s"} • live
-          </div>
         </div>
       ) : null}
     </section>

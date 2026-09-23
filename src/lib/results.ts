@@ -1,6 +1,7 @@
 import { desc } from "drizzle-orm";
-import { db, ensureTablesExist, isDatabaseConfigured } from "@/db";
+import { db, ensureTablesExist, isDatabaseConfigured, markDatabaseBroken } from "@/db";
 import { form1Responses, form2Responses, type Form1Row, type Form2Row } from "@/db/schema";
+import { getAllForm1, getAllForm2, type Form1Record, type Form2Record } from "./storage";
 import { FORM1_QUESTIONS, TIME_SLOTS, labelFor } from "./survey";
 
 export type DistRow = { value: string; label: string; count: number; percent: number };
@@ -86,31 +87,34 @@ export type Form1Results = {
   teachers: number;
   distributions: Distribution[];
   recent: { role: string; department: string; createdAt: string }[];
+  isFallback?: boolean;
 };
 
 export async function getForm1Results(): Promise<Form1Results> {
-  if (!isDatabaseConfigured()) {
-    return {
-      totalResponses: 0,
-      students: 0,
-      teachers: 0,
-      distributions: FORM1_QUESTIONS.map((q) => ({
-        id: q.id,
-        title: q.titleBn,
-        titleEn: q.titleEn,
-        total: 0,
-        rows: [],
-      })),
-      recent: [],
-    };
-  }
+  let rows: (Form1Row | Form1Record)[] = [];
+  let isFallback = false;
 
-  await ensureTablesExist();
-  const rows = await db.select().from(form1Responses).orderBy(desc(form1Responses.createdAt));
+  if (isDatabaseConfigured()) {
+    try {
+      await ensureTablesExist();
+      rows = await db.select().from(form1Responses).orderBy(desc(form1Responses.createdAt));
+    } catch (err) {
+      console.warn("Postgres fetch failed, falling back to local store:", err);
+      markDatabaseBroken(err instanceof Error ? err.message : String(err));
+      rows = getAllForm1();
+      isFallback = true;
+    }
+  } else {
+    rows = getAllForm1();
+    isFallback = true;
+  }
 
   const distributions: Distribution[] = FORM1_QUESTIONS.map((q) => {
     const key = FORM1_ROW_KEYS[q.id];
-    const values = rows.map((r) => (r[key] as string | null) ?? null);
+    const values = rows.map((r) => {
+      const val = (r as unknown as Record<string, unknown>)[key];
+      return (val as string | null) ?? null;
+    });
     const distRows = tally(values, q.id);
     const total = distRows.reduce((sum, r) => sum + r.count, 0);
     return { id: q.id, title: q.titleBn, titleEn: q.titleEn, total, rows: distRows };
@@ -124,8 +128,10 @@ export async function getForm1Results(): Promise<Form1Results> {
     recent: rows.slice(0, 8).map((r) => ({
       role: r.role,
       department: r.departmentOther ?? r.department,
-      createdAt: r.createdAt.toISOString(),
+      createdAt:
+        r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
     })),
+    isFallback,
   };
 }
 
@@ -141,6 +147,7 @@ export type Form2Results = {
   feedback: { text: string; role: string; department: string }[];
   bestSlot?: RatingSummary;
   worstSlot?: RatingSummary;
+  isFallback?: boolean;
 };
 
 export async function getForm2Results(): Promise<Form2Results> {
@@ -158,31 +165,41 @@ export async function getForm2Results(): Promise<Form2Results> {
     distribution: tally(values),
   });
 
-  if (!isDatabaseConfigured()) {
-    const emptySlots = TIME_SLOTS.map((s) => ratingSummary(s.id, s.label, s.range, []));
-    return {
-      totalResponses: 0,
-      students: 0,
-      teachers: 0,
-      slots: emptySlots,
-      longGap: ratingSummary("long_gap_rating", "Long campus gaps", undefined, []),
-      fairness: ratingSummary("fairness_rating", "Multi-semester fairness", undefined, []),
-      roleSplit: { id: "role", title: "Role", total: 0, rows: [] },
-      departmentSplit: { id: "department", title: "Department", total: 0, rows: [] },
-      feedback: [],
-    };
-  }
+  let rows: (Form2Row | Form2Record)[] = [];
+  let isFallback = false;
 
-  await ensureTablesExist();
-  const rows = await db.select().from(form2Responses).orderBy(desc(form2Responses.createdAt));
+  if (isDatabaseConfigured()) {
+    try {
+      await ensureTablesExist();
+      rows = await db.select().from(form2Responses).orderBy(desc(form2Responses.createdAt));
+    } catch (err) {
+      console.warn("Postgres fetch failed, falling back to local store:", err);
+      markDatabaseBroken(err instanceof Error ? err.message : String(err));
+      rows = getAllForm2();
+      isFallback = true;
+    }
+  } else {
+    rows = getAllForm2();
+    isFallback = true;
+  }
 
   const slots = TIME_SLOTS.map((slot) => {
     const key = FORM2_ROW_KEYS[slot.id];
-    const values = rows.map((r) => r[key] as number);
+    const values = rows.map((r) => {
+      const val = (r as unknown as Record<string, unknown>)[key];
+      return Number(val) || 0;
+    }).filter((v) => v > 0);
     return ratingSummary(slot.id, slot.label, slot.range, values);
   });
 
   const sorted = [...slots].sort((a, b) => b.average - a.average);
+
+  const longGapValues = rows
+    .map((r) => Number((r as unknown as Record<string, unknown>).longGapRating) || 0)
+    .filter((v) => v > 0);
+  const fairnessValues = rows
+    .map((r) => Number((r as unknown as Record<string, unknown>).fairnessRating) || 0)
+    .filter((v) => v > 0);
 
   return {
     totalResponses: rows.length,
@@ -193,13 +210,13 @@ export async function getForm2Results(): Promise<Form2Results> {
       "long_gap_rating",
       "Long campus gaps between classes (idle wait time)",
       undefined,
-      rows.map((r) => r.longGapRating),
+      longGapValues,
     ),
     fairness: ratingSummary(
       "fairness_rating",
       "Multi-semester fairness (algorithmic memory)",
       undefined,
-      rows.map((r) => r.fairnessRating),
+      fairnessValues,
     ),
     roleSplit: {
       id: "role",
@@ -223,6 +240,7 @@ export async function getForm2Results(): Promise<Form2Results> {
       })),
     bestSlot: sorted[0],
     worstSlot: sorted[sorted.length - 1],
+    isFallback,
   };
 }
 

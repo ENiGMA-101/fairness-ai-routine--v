@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { Check, Sparkles } from "lucide-react";
 import type { Option } from "@/lib/survey";
 
 export type Stats = {
@@ -60,50 +61,92 @@ export default function PollCard({
   };
 
   return (
-    <section className="mb-5 rounded-[24px] border border-zinc-200 bg-white p-6 shadow-sm">
-      {visual ? <div className="mb-4">{visual}</div> : null}
-      <h3 className="text-[16px] font-semibold leading-snug text-zinc-900">
-        {index ? <span className="text-violet-600">{index}. </span> : null}
-        {title}
-      </h3>
-      {subtitle ? <p className="mt-1 text-sm text-zinc-500">{subtitle}</p> : null}
+    <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm transition-all hover:shadow-md">
+      {/* Graphical illustration */}
+      {visual ? <div className="mb-5">{visual}</div> : null}
 
-      <div className="mt-4 space-y-3">
+      {/* Question Header */}
+      <div className="flex items-start gap-3">
+        {index ? (
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-xs font-black text-violet-700">
+            {index}
+          </span>
+        ) : null}
+        <div className="flex-1">
+          <h3 className="text-[17px] font-bold leading-snug text-zinc-900">{title}</h3>
+          {subtitle ? (
+            <p className="mt-1 text-sm font-medium text-zinc-500">{subtitle}</p>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Poll Options */}
+      <div className="mt-5 space-y-3">
         {options.map((opt) => {
           const selected = value === opt.value;
           const pct = current?.percentages?.[opt.value] ?? 0;
+          const voteCount = current?.counts?.[opt.value] ?? 0;
+
           return (
             <button
               key={opt.value}
               type="button"
               onClick={() => handle(opt)}
-              className={`relative w-full overflow-hidden rounded-2xl border-2 px-4 py-3.5 text-left transition ${
+              className={`group relative w-full overflow-hidden rounded-2xl border-2 px-5 py-4 text-left transition-all duration-300 ${
                 selected
-                  ? "border-violet-600 bg-violet-50"
-                  : "border-zinc-200 bg-white hover:border-zinc-400"
+                  ? "border-violet-600 bg-violet-50/50 shadow-sm ring-2 ring-violet-500/20"
+                  : "border-zinc-200 bg-white hover:border-violet-300 hover:bg-zinc-50/70"
               }`}
             >
+              {/* Animated Live Percentage Fill */}
               {current ? (
                 <div
-                  className={`absolute inset-y-0 left-0 transition-all duration-700 ${
-                    selected ? "bg-violet-200" : "bg-zinc-100"
+                  className={`absolute inset-y-0 left-0 transition-all duration-700 ease-out ${
+                    selected ? "bg-violet-200/60" : "bg-zinc-100/80"
                   }`}
-                  style={{ width: `${pct}%` }}
+                  style={{ width: `${Math.max(pct, 1)}%` }}
                 />
               ) : null}
+
+              {/* Foreground Content */}
               <div className="relative flex items-center justify-between gap-3">
-                <span className="flex items-center gap-3">
+                <div className="flex items-center gap-3.5">
                   <span
-                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
-                      selected ? "border-violet-600 bg-violet-600" : "border-zinc-300"
+                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                      selected
+                        ? "border-violet-600 bg-violet-600 text-white shadow-sm"
+                        : "border-zinc-300 bg-white group-hover:border-zinc-400"
                     }`}
                   >
-                    {selected ? <span className="h-2 w-2 rounded-full bg-white" /> : null}
+                    {selected ? <Check className="h-3 w-3 stroke-[3]" /> : null}
                   </span>
-                  <span className="text-[15px]">{opt.label}</span>
-                </span>
+                  <span
+                    className={`text-[15px] font-medium leading-snug ${
+                      selected ? "font-bold text-violet-950" : "text-zinc-800"
+                    }`}
+                  >
+                    {opt.label}
+                  </span>
+                </div>
+
+                {/* Percentage & Vote Count Badge */}
                 {current ? (
-                  <span className="shrink-0 text-sm font-bold text-zinc-700">{pct}%</span>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {voteCount > 0 && (
+                      <span className="hidden text-xs text-zinc-400 sm:inline">
+                        {voteCount} vote{voteCount === 1 ? "" : "s"}
+                      </span>
+                    )}
+                    <span
+                      className={`rounded-full px-2.5 py-0.5 text-xs font-black ${
+                        selected
+                          ? "bg-violet-600 text-white shadow-sm"
+                          : "bg-zinc-200/70 text-zinc-700"
+                      }`}
+                    >
+                      {pct}%
+                    </span>
+                  </div>
                 ) : null}
               </div>
             </button>
@@ -111,13 +154,20 @@ export default function PollCard({
         })}
       </div>
 
-      {current ? (
-        <div className="mt-3 text-xs text-zinc-400">
-          {current.total} response{current.total === 1 ? "" : "s"} • live
-        </div>
-      ) : (
-        <div className="mt-3 text-xs text-zinc-400">Percentages appear once you pick an option</div>
-      )}
+      {/* Poll Footer */}
+      <div className="mt-3.5 flex items-center justify-between text-xs text-zinc-400">
+        {current ? (
+          <span className="flex items-center gap-1.5 font-medium text-violet-600">
+            <span className="h-1.5 w-1.5 rounded-full bg-violet-600 animate-pulse" />
+            {current.total} response{current.total === 1 ? "" : "s"} • Live results
+          </span>
+        ) : (
+          <span className="flex items-center gap-1 text-zinc-400">
+            <Sparkles className="h-3.5 w-3.5 text-zinc-400" />
+            Pick an option to see live community poll results
+          </span>
+        )}
+      </div>
     </section>
   );
 }
