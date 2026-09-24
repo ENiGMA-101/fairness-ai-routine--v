@@ -29,8 +29,9 @@ export const DEPARTMENTS = [
 export const SEMESTERS = ["1.1", "1.2", "2.1", "2.2", "3.1", "3.2", "4.1", "4.2"] as const;
 
 /**
- * Demographic / identifier questions — always shown at the top in fixed order,
- * never shuffled. They are also not opinion polls, so the live-% reveal is hidden.
+ * Profile questions always keep their position at the top of the form.
+ * Fixed order is independent of result visibility: the semester poll reveals
+ * all option counts and percentages after the visitor chooses a semester.
  */
 export const FIXED_QUESTION_IDS = new Set(["role", "department", "semester"]);
 

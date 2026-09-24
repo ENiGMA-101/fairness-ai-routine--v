@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Builds `public/fairness-app.zip` — a complete, Vercel-ready snapshot of this project.
+ * Builds a private `fairness-app.zip` at the project root — a complete, Vercel-ready snapshot.
  *
  * Usage:  node scripts/make-zip.mjs
  */
@@ -88,7 +88,8 @@ out
 *.tsbuildinfo
 next-env.d.ts
 drizzle/
-`,
+fairness-app.zip
+`, 
 );
 
 writeFileSync(join(appDir, "public", ".gitkeep"), "");

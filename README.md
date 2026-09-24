@@ -1,64 +1,38 @@
-# Fairness-Aware AI Routine Generator — Survey Platform
+# Fairness-Aware AI Routine Generator
 
-Anonymous research survey for fairness-aware class-routine generation (University of Asia
-Pacific). Two forms, live Facebook-style result bars, and one vote per browser.
+A bilingual university research survey built with Next.js App Router, Tailwind and PostgreSQL (Drizzle ORM). Students and teachers share anonymous timetable preferences and rate seven daily time slots.
 
-> **Deployable archive:** run `node scripts/make-zip.mjs` → writes `fairness-app.zip` at the
-> project root. It is intentionally **not** in `/public`; download it through the protected
-> endpoint `/api/source?token=YOUR_ADMIN_TOKEN`.
+## Public experience
 
-## Routes
+- **`/`**: research topic, immediate access to both surveys, live response counters and aggregate insights.
+- **`/form1`**: preference survey. Role, department and semester remain fixed; opinion questions shuffle on entry. After choosing an option, **every option in that question** reveals its percentage and number of submitted votes—including all eight semester choices. Fixed order does not suppress results. Changing an answer does not cast a vote; only Submit records it.
+- **`/form2`**: seven time-slot ratings, gap/fairness ratings and optional feedback. Rating a slot or a question reveals **all five ratings** and their submitted vote counts.
+- **`/results/form1`** and **`/results/form2`**: aggregate results in the original question order (never shuffled).
+- A site-wide light/dark theme switch remembers your choice in the browser.
 
-| Route | Description |
-| --- | --- |
-| `/` | Landing page with live response counters + ZIP download |
-| `/form1` | Student & Teacher survey — 11 student questions + 7 teacher questions (exact PDF wording, Bangla + English), each with an illustration of the trade-off |
-| `/form2` | Time-slot rating survey — rate 7 slots 1–5, long-gap tolerance, multi-semester fairness, free-text constraints |
-| `/results/form1` | Live dashboard: distribution bars for every question |
-| `/results/form2` | Live dashboard: slot ranking, averages, feedback wall |
-| `/api/health` | Healthcheck (`select 1`) |
-| `/api/form1/submit`, `/api/form2/submit` | Write a response (duplicate browser IDs return `409`) |
-| `/api/form1/stats?question=q_avoid`, `/api/form2/stats?question=time_slot_8_00` | Live percentage bars |
-| `/api/form1/results`, `/api/form2/results` | Full aggregate JSON |
+## Production deployment
 
-## Stack
+**A PostgreSQL database is required for durable responses on Vercel.** A local `/tmp` fallback exists for previews, but serverless files are ephemeral and must **not** be relied on to collect research responses. Connect Neon (through Vercel Storage) or Supabase and set `DATABASE_URL` or `POSTGRES_URL` in Vercel environment variables. The application creates survey tables automatically, or you can apply `db/init.sql`.
 
-- Next.js (App Router) + React + Tailwind CSS
-- PostgreSQL via Drizzle ORM (`src/db/schema.ts`)
-- No auth: responses are anonymous. Duplicate protection = `localStorage` browser ID
-  **plus** a `unique` constraint on `browser_id` in the database.
+Set a unique `ADMIN_TOKEN` (at least 24 characters) to unlock `/setup`, `/api/export` and `/api/source`. Without a configured token these private endpoints stay locked. The generated archive is kept at the project root, outside `public/`, and is gitignored.
+
+See `DEPLOY.md` for a step-by-step checklist.
 
 ## Local development
 
 ```bash
 npm install
-cp .env.example .env         # point DATABASE_URL at your Postgres
-psql "$DATABASE_URL" -f db/init.sql   # or: npx drizzle-kit push
+cp .env.example .env
+# Set DATABASE_URL in .env to your local PostgreSQL connection
+# Optionally set ADMIN_TOKEN to use the private console
+npx drizzle-kit push
 npm run dev
 ```
 
-## Deploying to Vercel (30 seconds)
-
-1. Unzip `fairness-app.zip` (or push this repo to GitHub).
-2. Create a Postgres database — Neon, Supabase, Railway, or Vercel Postgres all work.
-3. Run `db/init.sql` against it (Supabase → SQL editor, Neon → SQL editor, or
-   `psql "$DATABASE_URL" -f db/init.sql`).
-4. Vercel → **Add New… → Project** → import the folder/repo.
-5. Add the environment variable `DATABASE_URL` (Production + Preview).
-6. Deploy. Done — no other configuration is required.
-
-See `DEPLOY.md` for a step-by-step walkthrough with screenshots-level detail.
-
 ## Data model
 
-`form1_responses` — one row per browser: role, department, semester, and 18 preference
-columns (`q_avoid`, `q_weekly_off`, `q_between_classes`, `q_extra_time`, `q_long_gap`,
-`q_midday_break`, `q_max_hours`, `q_lab_cap`, `q_priority_group`, `q_conflict_student`,
-`q_teaching_schedule`, `q_zero_day`, `q_consecutive`, `q_gap_pref`, `q_faculty_conflict`,
-`q_compensate`, `q_conflict_teacher`).
+- `form1_responses`: anonymous role, department, semester, and student/teacher preference answers.
+- `form2_responses`: seven 1–5 time-slot ratings, gap/fairness ratings, and optional feedback.
+- `browser_id` has a database unique constraint per form. The browser also remembers submission state via localStorage.
 
-`form2_responses` — one row per browser: 7 slot ratings (1–5), `long_gap_rating`,
-`fairness_rating`, and free-text `feedback`.
-
-Question wording, option values, and illustrations live in `src/lib/survey.ts` — edit that
-one file to change both the forms and the results dashboards.
+Question text and display order are defined in `src/lib/survey.ts`; survey illustrations are in `src/components/Visuals.tsx`. Results are aggregated in `src/lib/results.ts`.

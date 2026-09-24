@@ -3,17 +3,16 @@
  * public: they require the ADMIN_TOKEN environment variable (or its header/query).
  */
 
-export const DEFAULT_ADMIN_TOKEN = "uap-research-admin";
-
-export function getAdminToken(): string {
-  return process.env.ADMIN_TOKEN?.trim() || DEFAULT_ADMIN_TOKEN;
+export function getAdminToken(): string | null {
+  // Private routes stay locked unless a strong token is explicitly configured.
+  const token = process.env.ADMIN_TOKEN?.trim();
+  return token && token.length >= 24 ? token : null;
 }
 
 export function isTokenValid(token: string | null | undefined): boolean {
-  if (!token) return false;
   const expected = getAdminToken();
-  if (token.length !== expected.length) return false;
-  // constant-time-ish comparison
+  if (!expected || !token || token.length !== expected.length) return false;
+  // Compare every character without returning early on a mismatch.
   let diff = 0;
   for (let i = 0; i < expected.length; i += 1) {
     diff |= expected.charCodeAt(i) ^ token.charCodeAt(i);

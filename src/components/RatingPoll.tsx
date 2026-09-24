@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Sparkles } from "lucide-react";
-import { useStats, type Stats } from "./PollCard";
+import type { PollStats, PollStatsMap } from "@/lib/poll-stats-client";
 
 type Props = {
   form: "form1" | "form2";
@@ -15,19 +15,19 @@ type Props = {
   onChange: (rating: number) => void;
   visual?: ReactNode;
   index?: number;
-  initialStats?: Record<string, Stats> | null;
+  initialStats?: PollStatsMap | null;
+  statsStatus?: "loading" | "ready" | "error";
 };
 
-const RATING_DESCRIPTIONS = [
-  { n: 1, emoji: "😡", desc: "Strongly against" },
-  { n: 2, emoji: "🙁", desc: "Prefer not" },
-  { n: 3, emoji: "😐", desc: "Neutral" },
-  { n: 4, emoji: "🙂", desc: "Good idea" },
-  { n: 5, emoji: "🤩", desc: "Strongly support" },
+const SCALE = [
+  { n: 1, emoji: "😣", label: "Strongly against" },
+  { n: 2, emoji: "🙁", label: "Prefer not" },
+  { n: 3, emoji: "😐", label: "Neutral" },
+  { n: 4, emoji: "🙂", label: "Good idea" },
+  { n: 5, emoji: "🤩", label: "Strongly support" },
 ];
 
 export default function RatingPoll({
-  form,
   questionId,
   title,
   titleBn,
@@ -38,101 +38,84 @@ export default function RatingPoll({
   visual,
   index,
   initialStats,
+  statsStatus = "loading",
 }: Props) {
-  const { stats, load } = useStats(form);
-  const current = initialStats?.[questionId] ?? stats[questionId];
-  // Distribution hidden until THIS user picks a rating here.
-  const [revealed, setRevealed] = useState(false);
-  const showStats = revealed && Boolean(current);
+  const [clicked, setClicked] = useState(false);
+  const stats: PollStats | null = initialStats?.[questionId] ?? null;
+  const showAllResults = clicked && stats !== null;
 
-  // Preload on mount in background
-  useEffect(() => {
-    void load(questionId);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const select = (n: number) => {
-    onChange(n);
-    setRevealed(true);
-    void load(questionId);
-  };
+  function select(rating: number) {
+    onChange(rating); // instant UI change; no database request here
+    setClicked(true);
+  }
 
   return (
-    <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm transition-all hover:shadow-md">
-      {visual ? <div className="mb-5">{visual}</div> : null}
-
+    <section className="survey-card mb-6 rounded-[26px] border border-slate-200 bg-white p-5 shadow-[0_12px_36px_-28px_rgba(38,48,84,0.42)] sm:p-7 dark:border-slate-700 dark:bg-[#18233b]">
+      {visual && <div className="survey-visual mb-5">{visual}</div>}
       <div className="flex items-start gap-3">
-        {index ? (
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-xs font-black text-violet-700">
-            {index}
-          </span>
-        ) : null}
-        <div className="flex-1">
-          {title ? (
-            <h3 className="text-[17px] font-bold leading-snug text-zinc-900">{title}</h3>
-          ) : null}
-          {titleBn ? (
-            <p className="mt-1.5 text-[15px] leading-relaxed text-zinc-700 font-medium">{titleBn}</p>
-          ) : null}
+        {index && <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-fuchsia-100 text-xs font-black text-fuchsia-700 dark:bg-fuchsia-500/20 dark:text-fuchsia-200">{index}</span>}
+        <div>
+          <h3 className="text-[16px] font-bold leading-snug text-slate-900 sm:text-[17px] dark:text-white">{title}</h3>
+          {titleBn && <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{titleBn}</p>}
         </div>
       </div>
 
-      {/* 1-5 Button Grid */}
-      <div className="mt-6 grid grid-cols-5 gap-2">
-        {RATING_DESCRIPTIONS.map((item) => {
-          const active = value === item.n;
+      <div className="mt-5 grid grid-cols-5 gap-1.5 sm:gap-2" role="group" aria-label={title}>
+        {SCALE.map(({ n, emoji, label }) => {
+          const selected = value === n;
+          const percent = stats?.percentages?.[String(n)] ?? 0;
+          const count = stats?.counts?.[String(n)] ?? 0;
           return (
             <button
-              key={item.n}
+              key={n}
               type="button"
-              onClick={() => select(item.n)}
-              className={`flex flex-col items-center justify-center rounded-2xl border-2 py-3.5 transition-all ${
-                active
-                  ? "border-violet-600 bg-violet-600 text-white shadow-lg scale-[1.04]"
-                  : "border-zinc-200 bg-white text-zinc-700 hover:border-violet-300 hover:bg-violet-50/30"
-              }`}
+              title={label}
+              aria-label={`Rating ${n} of 5: ${label}`}
+              aria-pressed={selected}
+              onClick={() => select(n)}
+              className={`flex min-h-[74px] flex-col items-center justify-center gap-0.5 rounded-2xl border-[1.5px] px-1 py-2 text-sm font-bold transition-all sm:min-h-[86px] ${selected
+                ? "border-fuchsia-500 bg-fuchsia-50 text-fuchsia-800 ring-[3px] ring-fuchsia-500/10 dark:border-fuchsia-400 dark:bg-fuchsia-500/15 dark:text-fuchsia-100"
+                : "border-slate-200 bg-white text-slate-700 hover:border-fuchsia-300 dark:border-slate-600 dark:bg-[#1e2c47] dark:text-slate-200 dark:hover:border-fuchsia-400"}`}
             >
-              <span className="text-xl sm:text-2xl">{item.emoji}</span>
-              <span className="mt-1 text-sm font-black">{item.n}</span>
+              <span className="text-xl" aria-hidden="true">{emoji}</span>
+              <span>{n}</span>
+              {showAllResults && <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${selected ? "bg-fuchsia-600 text-white dark:bg-fuchsia-400 dark:text-slate-950" : "bg-slate-100 text-slate-700 dark:bg-slate-600 dark:text-slate-100"}`}>{percent}%</span>}
+              {showAllResults && <span className="text-[10px] font-normal text-slate-500 dark:text-slate-300">{count} vote{count === 1 ? "" : "s"}</span>}
             </button>
           );
         })}
       </div>
-
-      {/* End labels */}
-      <div className="mt-3 flex justify-between gap-4 text-xs font-medium text-zinc-500">
-        <span className="max-w-[48%] rounded-lg bg-zinc-100 p-1.5 text-zinc-700">{leftLabel}</span>
-        <span className="max-w-[48%] text-right rounded-lg bg-zinc-100 p-1.5 text-zinc-700">
-          {rightLabel}
-        </span>
+      <div className="mt-3 flex justify-between gap-4 text-[11px] font-medium text-slate-500 dark:text-slate-400 sm:text-xs">
+        <span className="max-w-[48%]">{leftLabel}</span>
+        <span className="max-w-[48%] text-right">{rightLabel}</span>
       </div>
 
-      {/* Live Distribution — only after user picks a rating */}
-      {showStats ? (
-        <div className="mt-5 space-y-2 rounded-2xl bg-zinc-50 p-4 border border-zinc-200">
-          <div className="flex items-center justify-between text-xs text-zinc-500 mb-1">
-            <span className="font-bold text-violet-700 flex items-center gap-1">
-              <Sparkles className="h-3.5 w-3.5" /> Live community votes
-            </span>
-            <span>{current.total} response{current.total === 1 ? "" : "s"}</span>
+      {showAllResults ? (
+        <div className="mt-5 rounded-2xl border border-fuchsia-200 bg-fuchsia-50/70 p-4 dark:border-fuchsia-500/25 dark:bg-fuchsia-500/10" aria-live="polite">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-700 dark:text-slate-200">
+            <span className="flex items-center gap-1.5 font-semibold"><Sparkles className="h-4 w-4 text-fuchsia-600 dark:text-fuchsia-300" /> All rating results</span>
+            <span>{stats.total} submitted response{stats.total === 1 ? "" : "s"}</span>
           </div>
-          {[1, 2, 3, 4, 5].map((n) => {
-            const pct = current.percentages?.[String(n)] ?? 0;
-            return (
-              <div key={n} className="flex items-center gap-2.5 text-xs">
-                <span className="w-5 font-bold text-zinc-600">{n} ★</span>
-                <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-zinc-200">
-                  <div
-                    className="h-full rounded-full bg-violet-600 transition-all duration-500"
-                    style={{ width: `${pct}%` }}
-                  />
+          <div className="mt-3 space-y-2.5">
+            {SCALE.map(({ n }) => {
+              const percent = stats.percentages?.[String(n)] ?? 0;
+              const count = stats.counts?.[String(n)] ?? 0;
+              return (
+                <div key={n} className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+                  <span className="w-7 font-bold">{n} ★</span>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-white dark:bg-slate-700"><div className={`h-full rounded-full transition-[width] duration-300 ${value === n ? "bg-gradient-to-r from-fuchsia-500 to-violet-500" : "bg-sky-400 dark:bg-sky-500"}`} style={{ width: `${percent}%` }} /></div>
+                  <span className="w-16 text-right tabular-nums">{count} · {percent}%</span>
                 </div>
-                <span className="w-10 text-right font-black text-zinc-800">{pct}%</span>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+          <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">Changing your selection does not add a vote. Your answer counts after Submit.</p>
         </div>
-      ) : null}
+      ) : clicked ? (
+        <p className="mt-4 text-xs text-slate-500 dark:text-slate-400" aria-live="polite">{statsStatus === "error" ? "Results unavailable right now. Your selection is saved on this page." : "Fetching all community ratings… your selection is ready."}</p>
+      ) : (
+        <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">Choose a rating to reveal all five results.</p>
+      )}
     </section>
   );
 }

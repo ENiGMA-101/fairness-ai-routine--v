@@ -3,6 +3,7 @@ import { db, ensureTablesExist, isDatabaseConfigured, markDatabaseBroken } from 
 import { form1Responses } from "@/db/schema";
 import { addForm1Response } from "@/lib/storage";
 import { FORM1_COLUMN_KEYS, DEPARTMENTS, SEMESTERS } from "@/lib/survey";
+import { invalidate } from "@/lib/stats-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -148,6 +149,9 @@ export async function POST(req: NextRequest) {
 
       // Mirror to storage as backup
       addForm1Response(storagePayload);
+      invalidate("poll-stats-form1");
+      invalidate("form1-results");
+      invalidate("home-stats");
       return NextResponse.json({ ok: true, id: inserted[0].id, storage: "database" });
     } catch (pgError) {
       console.warn("PostgreSQL insert failed, using fallback storage:", pgError);
@@ -161,6 +165,9 @@ export async function POST(req: NextRequest) {
   if (!localResult.ok && localResult.duplicate) {
     return NextResponse.json({ error: "duplicate", duplicate: true }, { status: 409 });
   }
+  invalidate("poll-stats-form1");
+  invalidate("form1-results");
+  invalidate("home-stats");
 
   return NextResponse.json({
     ok: true,

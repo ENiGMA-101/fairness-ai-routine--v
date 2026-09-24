@@ -11,16 +11,16 @@ import {
   Sparkles,
   BarChart3,
   Building2,
-  Home,
   ShieldCheck,
 } from "lucide-react";
 import PollCard from "@/components/PollCard";
+import HomeButton from "@/components/HomeButton";
 import { FORM1_VISUALS } from "@/components/Visuals";
+import { useSurveyPollStats } from "@/lib/poll-stats-client";
 import { getBrowserId, isSubmitted, markSubmitted } from "@/lib/browser";
 import {
   DEPARTMENTS,
   FORM1_QUESTIONS,
-  FIXED_QUESTION_IDS,
   orderForSurvey,
 } from "@/lib/survey";
 
@@ -35,7 +35,7 @@ export default function Form1Page() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [batchStats, setBatchStats] = useState<Record<string, { total: number; counts: Record<string, number>; percentages: Record<string, number> }>>({});
+  const { stats: batchStats, status: statsStatus } = useSurveyPollStats("form1");
   // Distinguishes "just submitted" from "already submitted earlier on this browser"
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
 
@@ -44,16 +44,6 @@ export default function Form1Page() {
       setSubmitted(true);
       setAlreadySubmitted(true);
     }
-  }, []);
-
-  // Preload ALL question stats in one request — shows instantly when user clicks
-  useEffect(() => {
-    void fetch("/api/form1/stats/all", { cache: "no-store" })
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
-        if (data && typeof data === "object") setBatchStats(data);
-      })
-      .catch(() => {});
   }, []);
 
   // Shuffle opinion questions on every entry; demographic questions (semester) stay fixed at top
@@ -108,41 +98,29 @@ export default function Form1Page() {
         }),
       });
 
-      // Whether 200 OK or 409 (duplicate browser), treat as successful submission
-      if (res.ok || res.status === 409) {
+      if (res.status === 409) {
+        markSubmitted("form1");
+        setAlreadySubmitted(true);
+        setSubmitted(true);
+        return;
+      }
+      if (res.ok) {
         markSubmitted("form1");
         setSubmitted(true);
         try {
-          confetti({
-            particleCount: 80,
-            spread: 70,
-            origin: { y: 0.6 },
-          });
+          confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
         } catch {
-          /* ignore */
+          /* animation is optional */
         }
         return;
       }
 
       const data = (await res.json().catch(() => ({}))) as { error?: string };
-      const rawError = data.error ?? `Submission failed (${res.status})`;
-
-      // If any unexpected string was returned, protect UI
-      if (rawError.includes("Failed query") || rawError.includes("insert into")) {
-        markSubmitted("form1");
-        setSubmitted(true);
-        return;
-      }
-      // Only validation messages (HTTP 400) are ever shown to respondents.
-      setError(
-        res.status === 400
-          ? rawError
-          : "আপনার উত্তর নেওয়া যায়নি — অনুগ্রহ করে একটু পরে আবার চেষ্টা করুন। / Please try again in a moment.",
-      );
+      setError(res.status === 400 && data.error
+        ? data.error
+        : "আপনার উত্তর জমা হয়নি। অনুগ্রহ করে সংযোগ যাচাই করে আবার চেষ্টা করুন। / Your response was not saved. Please try again.");
     } catch {
-      // Offline fallback: mark as submitted locally
-      markSubmitted("form1");
-      setSubmitted(true);
+      setError("সংযোগ পাওয়া যায়নি। আপনার উত্তর জমা হয়নি — পরে আবার চেষ্টা করুন। / Connection lost. Please retry.");
     } finally {
       setLoading(false);
     }
@@ -177,12 +155,7 @@ export default function Form1Page() {
             >
               <BarChart3 className="h-4 w-4" /> View Live Results
             </Link>
-            <Link
-              href="/"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-400 hover:text-zinc-600 pt-2"
-            >
-              <Home className="h-3.5 w-3.5" /> Back to Survey Home
-            </Link>
+            <HomeButton label="Back to survey home" />
           </div>
         </div>
       </div>
@@ -227,12 +200,7 @@ export default function Form1Page() {
             >
               <BarChart3 className="h-4 w-4" /> View Live Form 1 Results
             </Link>
-            <Link
-              href="/"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-400 hover:text-zinc-600 pt-2"
-            >
-              <Home className="h-3.5 w-3.5" /> Back to Survey Home
-            </Link>
+            <HomeButton label="Back to survey home" />
           </div>
         </div>
       </div>
@@ -240,16 +208,11 @@ export default function Form1Page() {
   }
 
   return (
-    <div className="min-h-screen pb-16 bg-[#f6f5f2]">
+    <div className="min-h-screen bg-[#f6f5f2] pb-24 dark:bg-[#0a1326]">
       {/* Sticky Top Header with Animated Progress */}
       <div className="sticky top-0 z-30 border-b border-zinc-200/80 bg-white/90 backdrop-blur-md">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3.5">
-          <Link
-            href="/"
-            className="flex items-center gap-1.5 text-sm font-bold text-zinc-700 hover:text-black transition"
-          >
-            <Home className="h-4 w-4" /> Home
-          </Link>
+          <HomeButton />
 
           <div className="flex items-center gap-3">
             <span className="text-xs font-bold text-zinc-500 tabular-nums">
@@ -271,22 +234,23 @@ export default function Form1Page() {
       </div>
 
       <div className="mx-auto max-w-3xl px-4 py-8">
-        {/* Hero Card */}
-        <div className="mb-6 rounded-[32px] border border-zinc-200/80 bg-white p-7 md:p-9 shadow-sm">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-700">
-            <Sparkles className="h-3.5 w-3.5" /> Survey Form 1 • UAP Research
+        {/* Research introduction */}
+        <div className="mb-6 overflow-hidden rounded-[28px] border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-sky-50 p-6 shadow-sm sm:p-8 dark:border-violet-500/30 dark:from-[#262349] dark:via-[#18243b] dark:to-[#152f43]">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-white/85 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-violet-700 dark:border-violet-500/30 dark:bg-violet-500/15 dark:text-violet-200">
+            <Sparkles className="h-3.5 w-3.5" /> Research survey · Form 01
           </div>
-          <h1 className="mt-3 text-3xl md:text-4xl font-black leading-tight tracking-tight text-zinc-900">
-            Fairness Aware AI Routine Generator
+          <h1 className="mt-4 text-[27px] font-black leading-tight tracking-tight text-slate-950 sm:text-[34px] dark:text-white">
+            Fairness-Aware AI <span className="text-violet-700 dark:text-violet-300">Routine Generator</span>
           </h1>
-          <p className="mt-1 text-lg font-bold text-violet-600">
-            Student &amp; Teacher Preference Survey
+          <p className="mt-1 text-base font-bold text-slate-700 dark:text-slate-200">Student &amp; Teacher Preference Survey</p>
+          <p className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+            একটি ন্যায্য ক্লাস রুটিন তৈরির গবেষণায় আপনার মতামত দিন। কোনো প্রশ্নে একটি বিকল্প নির্বাচন করলে সেই প্রশ্নের সব বিকল্পের ভোটসংখ্যা ও শতকরা ফল একসাথে দেখতে পাবেন। আপনার উত্তর শুধু Submit চাপার পর গণনা হবে।
           </p>
-          <p className="mt-3 text-sm md:text-base text-zinc-600 leading-relaxed">
-            একই পৃষ্ঠায় স্ক্রল করে উত্তর দিন। প্রতিটি বিকল্প নির্বাচন করার পর তাৎক্ষণিকভাবে
-            কমিউনিটির <b>লাইভ শতকরা ফলাফল</b> দেখতে পাবেন। আপনার চূড়ান্ত ভোট Submit চাপার পর নিশ্চিত
-            হবে।
-          </p>
+          <div className="mt-4 flex flex-wrap gap-2 text-[11px] font-bold">
+            <span className="rounded-full bg-violet-100 px-3 py-1.5 text-violet-800 dark:bg-violet-500/20 dark:text-violet-200">Your perspective matters</span>
+            <span className="rounded-full bg-sky-100 px-3 py-1.5 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200">2–3 minutes</span>
+            <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200">Anonymous</span>
+          </div>
         </div>
 
         {/* 1. Role Selection (Graphical) */}
@@ -416,7 +380,7 @@ export default function Form1Page() {
                 onChange={(v) => setAnswer(q.id, v)}
                 visual={Visual ? <Visual /> : undefined}
                 initialStats={batchStats[q.id] ?? null}
-                hideResults={FIXED_QUESTION_IDS.has(q.id)}
+                statsStatus={statsStatus}
               />
             );
           })

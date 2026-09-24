@@ -1,6 +1,6 @@
 export default function Loading() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#f6f5f2]">
+    <div className="flex min-h-screen items-center justify-center bg-[#f6f5f2] dark:bg-[#0a1326]">
       <div className="text-center">
         <div className="mx-auto flex h-16 w-16 animate-pulse items-center justify-center rounded-3xl bg-violet-100 text-violet-600">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">

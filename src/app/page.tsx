@@ -1,220 +1,147 @@
 import Link from "next/link";
 import {
   ArrowRight,
-  GraduationCap,
-  Clock,
+  ArrowUpRight,
   BarChart3,
-  ShieldCheck,
+  CalendarDays,
+  Check,
   CheckCircle2,
-  Users,
+  Clock3,
+  GraduationCap,
+  Layers3,
+  Scale,
+  ShieldCheck,
+  Sparkles,
+  UsersRound,
 } from "lucide-react";
+import PollStatsWarmup from "@/components/PollStatsWarmup";
 import ResponseCounters from "@/components/ResponseCounters";
-// Fully static — no DB round-trip on navigation, so Home/back is instant.
+
+// Static HTML keeps the landing page fast. Aggregate data loads separately.
 export const revalidate = 300;
 
 export const metadata = {
-  title: "Fairness-Aware AI Routine Generator — Research Survey",
+  title: "Fairness-Aware AI Routine Generator · Research Project",
   description:
-    "Participate in the University of Asia Pacific research survey on fairness-aware class routine generation. Anonymous, 2–3 minutes, live results.",
+    "Take part in our university scheduling research. Open the student and teacher survey or the time-slot rating survey—no account needed.",
 };
-
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-[#f6f5f2]">
-      {/* Header */}
-      <header className="border-b border-zinc-200/80 bg-white/80 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-950 text-xs font-black text-white shadow-sm">
-              AI
-            </div>
-            <div>
-              <div className="text-sm font-black leading-tight tracking-tight text-zinc-900 sm:text-base">
-                Fairness-Aware AI Routine Generator
-              </div>
-              <div className="text-[11px] font-semibold text-zinc-400">
-                University of Asia Pacific • Research Survey 2025
-              </div>
-            </div>
-          </div>
-          <Link
-            href="/results/form1"
-            className="flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3.5 py-2 text-xs font-bold text-zinc-700 shadow-sm transition hover:border-zinc-400"
-          >
-            <BarChart3 className="h-3.5 w-3.5 text-violet-600" />
-            Live Results
+    <div className="research-site">
+      <PollStatsWarmup />
+      <a href="#surveys" className="research-skip-link">Skip to surveys</a>
+
+      <header className="research-header">
+        <div className="research-container research-header-inner">
+          <Link href="/" className="research-brand" aria-label="Fairness-Aware AI Routine Generator — home">
+            <span className="research-brand-icon"><Layers3 size={23} strokeWidth={1.8} /></span>
+            <span>
+              <span className="research-brand-name">Fairness-Aware AI Routine Generator</span>
+              <span className="research-brand-caption">Research Project</span>
+            </span>
           </Link>
+          <nav className="research-navigation" aria-label="Main navigation">
+            <a href="#about" className="research-nav-about">About the research</a>
+            <Link href="/results/form1" className="research-results-link">
+              <BarChart3 size={16} /> <span>Live results</span> <ArrowUpRight size={14} />
+            </Link>
+          </nav>
         </div>
       </header>
 
-      {/* FORMS FIRST — the two surveys are the primary content above the fold */}
-      <section className="mx-auto max-w-6xl px-5 pt-8 pb-6 sm:pt-10">
-        <div className="max-w-3xl">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-violet-700">
-            <Users className="h-3.5 w-3.5" /> Participate in our research
-          </span>
-          <h1 className="mt-3 text-3xl font-black leading-[1.1] tracking-tight text-zinc-900 sm:text-4xl">
-            Choose your survey and start — <span className="text-violet-600">2–3 minutes</span>
-          </h1>
-          <p className="mt-2 text-sm font-medium text-zinc-500 sm:text-base">
-            নিচের ফর্মগুলো একই পৃষ্ঠায় স্ক্রল করে পূরণ করুন — কোনো লগইন বা তথ্য প্রয়োজন নেই।
-          </p>
-        </div>
+      <main>
+        <section className="research-intro research-container" aria-labelledby="research-heading">
+          <div className="research-eyebrow"><span /> University of Asia Pacific · Research study</div>
+          <h1 id="research-heading">Better schedules.<br className="mobile-break" /> <span>Fairer opportunities.</span></h1>
+          <p className="research-intro-text">Your experience can help shape a more balanced university routine.<br className="desktop-break" /> Choose a short survey below. Start with either one.</p>
+          <p lang="bn" className="research-intro-bn">আপনার মতামত গুরুত্বপূর্ণ। নিচের যেকোনো জরিপ দিয়ে শুরু করুন।</p>
+        </section>
 
-        <div className="mt-7 grid gap-5 md:grid-cols-2">
-          {/* Form 1 — primary CTA */}
-          <Link
-            href="/form1"
-            className="group relative overflow-hidden rounded-[30px] border-2 border-zinc-200 bg-white p-7 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-violet-400 hover:shadow-2xl"
-          >
-            <div className="absolute right-0 top-0 h-32 w-32 -translate-y-10 translate-x-10 rounded-full bg-violet-100 blur-2xl" />
-            <div className="relative">
-              <div className="flex items-center justify-between">
-                <span className="rounded-full bg-violet-600 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-white shadow-sm">
-                  Form 01
-                </span>
-                <span className="flex items-center gap-1.5 text-[11px] font-bold text-zinc-400">
-                  <Clock className="h-3.5 w-3.5" /> 2–3 min
-                </span>
-              </div>
-
-              <h2 className="mt-5 text-2xl font-black tracking-tight text-zinc-900">
-                Student &amp; Teacher Survey
-              </h2>
-              <p className="mt-1 text-sm font-bold text-violet-600">
-                শিক্ষার্থী ও শিক্ষক জরিপ
-              </p>
-              <p className="mt-3 text-sm leading-relaxed text-zinc-600">
-                Preference questions for routine generation: daily timing, long gaps, midday
-                break, lab load and student–teacher conflict resolution.
-              </p>
-
-              <div className="mt-5 flex flex-wrap gap-2 text-[11px] font-bold text-zinc-500">
-                <span className="rounded-full bg-zinc-100 px-2.5 py-1">13 questions</span>
-                <span className="rounded-full bg-zinc-100 px-2.5 py-1">Bangla + English</span>
-                <span className="rounded-full bg-zinc-100 px-2.5 py-1">Live results</span>
-              </div>
-
-              <div className="mt-6 flex items-center justify-between border-t border-zinc-100 pt-5">
-                <span className="flex items-center gap-1.5 text-xs font-bold text-zinc-500">
-                  <GraduationCap className="h-4 w-4 text-violet-600" />
-                  Open Form 1
-                </span>
-                <span className="flex items-center gap-1.5 rounded-2xl bg-zinc-950 px-5 py-2.5 text-xs font-bold text-white shadow transition group-hover:bg-violet-600">
-                  Start now <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
-                </span>
-              </div>
-            </div>
-          </Link>
-
-          {/* Form 2 */}
-          <Link
-            href="/form2"
-            className="group relative overflow-hidden rounded-[30px] bg-zinc-950 p-7 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
-          >
-            <div className="absolute right-0 top-0 h-32 w-32 -translate-y-10 translate-x-10 rounded-full bg-violet-700/40 blur-2xl" />
-            <div className="relative">
-              <div className="flex items-center justify-between">
-                <span className="rounded-full border border-violet-400/40 bg-violet-500/20 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-violet-300">
-                  Form 02
-                </span>
-                <span className="flex items-center gap-1.5 text-[11px] font-bold text-zinc-500">
-                  <Clock className="h-3.5 w-3.5" /> 2 min
-                </span>
-              </div>
-
-              <h2 className="mt-5 text-2xl font-black tracking-tight text-white">
-                Time-Slot Rating Survey
-              </h2>
-              <p className="mt-1 text-sm font-bold text-violet-400">সময়ের পছন্দ রেটিং</p>
-              <p className="mt-3 text-sm leading-relaxed text-zinc-400">
-                Rate all seven daily class slots 1–5, judge long campus gaps, and decide whether
-                the AI should remember fairness across semesters.
-              </p>
-
-              <div className="mt-5 flex flex-wrap gap-2 text-[11px] font-bold text-zinc-500">
-                <span className="rounded-full bg-white/10 px-2.5 py-1">7 time slots</span>
-                <span className="rounded-full bg-white/10 px-2.5 py-1">Emoji rating</span>
-                <span className="rounded-full bg-white/10 px-2.5 py-1">Slot ranking</span>
-              </div>
-
-              <div className="mt-6 flex items-center justify-between border-t border-white/10 pt-5">
-                <span className="flex items-center gap-1.5 text-xs font-bold text-zinc-500">
-                  <Clock className="h-4 w-4 text-violet-400" />
-                  Open Form 2
-                </span>
-                <span className="flex items-center gap-1.5 rounded-2xl bg-white px-5 py-2.5 text-xs font-bold text-zinc-950 shadow transition group-hover:bg-violet-400">
-                  Start now <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
-                </span>
-              </div>
-            </div>
-          </Link>
-        </div>
-
-        {/* Trust strip */}
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs font-semibold text-zinc-500">
-          <span className="flex items-center gap-1.5">
-            <ShieldCheck className="h-4 w-4 text-emerald-600" /> 100% anonymous
-          </span>
-          <span className="flex items-center gap-1.5">
-            <CheckCircle2 className="h-4 w-4 text-sky-600" /> One response per browser
-          </span>
-          <span className="flex items-center gap-1.5">
-            <BarChart3 className="h-4 w-4 text-violet-600" /> Live aggregate results only
-          </span>
-        </div>
-      </section>
-
-      {/* Research context (below the forms) */}
-      <section className="border-t border-zinc-200/80 bg-white">
-        <div className="mx-auto grid max-w-6xl gap-8 px-5 py-12 md:grid-cols-3">
-          <div>
-            <h3 className="text-sm font-black uppercase tracking-wider text-zinc-900">
-              About this research
-            </h3>
-            <p className="mt-3 text-sm leading-relaxed text-zinc-600">
-              The Fairness-Aware AI Routine Generator produces a feasible university class routine
-              by balancing students, teachers, courses, labs, rooms and available time — while
-              keeping multi-semester fairness for everyone.
-            </p>
+        <section id="surveys" className="research-container research-surveys" aria-labelledby="survey-heading">
+          <div className="research-section-label">
+            <h2 id="survey-heading"><UsersRound size={16} /> Participate in our research</h2>
+            <span><Clock3 size={14} /> Just a few minutes</span>
           </div>
-          <div>
-            <h3 className="text-sm font-black uppercase tracking-wider text-zinc-900">
-              Why your answer matters
-            </h3>
-            <p className="mt-3 text-sm leading-relaxed text-zinc-600">
-              Every vote shapes the priority weights of the scheduling algorithm: morning vs.
-              evening preferences, acceptable daily hours, lab limits, and how the AI resolves
-              conflicts between students and faculty.
-            </p>
-          </div>
-          <div>
-            <h3 className="text-sm font-black uppercase tracking-wider text-zinc-900">
-              Data &amp; privacy
-            </h3>
-            <p className="mt-3 text-sm leading-relaxed text-zinc-600">
-              No name, email or student ID is collected — only your role, department and answers.
-              Results are published only in aggregate percentage form.
-            </p>
-          </div>
-        </div>
 
-          {/* Aggregate response counters (client-side → page stays fully static & instant) */}
+          <div className="research-survey-grid">
+            <article className="research-survey-card survey-purple">
+              <div className="research-card-top">
+                <span className="research-survey-icon"><GraduationCap size={27} strokeWidth={1.6} /></span>
+                <span className="research-form-label">Form 01</span>
+                <span className="research-time"><Clock3 size={14} /> 2–3 min</span>
+              </div>
+              <h3>Student &amp; Teacher Survey</h3>
+              <p lang="bn" className="research-card-bn">শিক্ষার্থী ও শিক্ষক জরিপ</p>
+              <p className="research-card-description">Tell us what a better class routine looks like for you—from daily timing and breaks to a fair teaching workload.</p>
+              <div className="research-card-tags"><span><UsersRound size={13} /> Students &amp; teachers</span><span>Bangla + English</span></div>
+
+              <div className="research-card-action">
+                <Link href="/form1" className="research-open-button" aria-label="Open Form 1 — Student and Teacher Survey">
+                  <span>Open Form 1</span><ArrowRight size={19} />
+                </Link>
+                <span className="research-card-note"><ShieldCheck size={13} /> No account needed</span>
+              </div>
+            </article>
+
+            <article className="research-survey-card survey-teal">
+              <div className="research-card-top">
+                <span className="research-survey-icon"><CalendarDays size={27} strokeWidth={1.6} /></span>
+                <span className="research-form-label">Form 02</span>
+                <span className="research-time"><Clock3 size={14} /> 2 min</span>
+              </div>
+              <h3>Time-Slot Rating Survey</h3>
+              <p lang="bn" className="research-card-bn">সময়ের পছন্দ রেটিং জরিপ</p>
+              <p className="research-card-description">Rate seven daily class slots and share your views on long campus gaps and fairness from one semester to the next.</p>
+              <div className="research-card-tags"><span><Clock3 size={13} /> 7 time slots</span><span>1–5 rating scale</span></div>
+
+              <div className="research-card-action">
+                <Link href="/form2" className="research-open-button" aria-label="Open Form 2 — Time-Slot Rating Survey">
+                  <span>Open Form 2</span><ArrowRight size={19} />
+                </Link>
+                <span className="research-card-note"><ShieldCheck size={13} /> No account needed</span>
+              </div>
+            </article>
+          </div>
+
+          <div className="research-trust-strip">
+            <span><ShieldCheck size={15} /> No name or email collected</span>
+            <span><CheckCircle2 size={15} /> One response per browser</span>
+            <span><BarChart3 size={15} /> Results after your selection</span>
+          </div>
+        </section>
+
+        <section id="about" className="research-container research-about" aria-labelledby="about-heading">
+          <div className="research-about-main">
+            <div className="research-eyebrow"><Sparkles size={14} /> The research behind the surveys</div>
+            <h2 id="about-heading">Fairness-Aware AI<br />Routine Generator</h2>
+            <p>We&apos;re exploring how an AI-assisted timetable can balance student preferences, faculty workloads and practical scheduling constraints—without leaving the same people with inconvenient slots every semester.</p>
+            <span className="research-stage"><span /> Research &amp; data collection phase</span>
+          </div>
+          <div className="research-principles">
+            <div><span className="research-principle-icon purple"><GraduationCap size={20} /></span><span><h3>Student preferences</h3><p>Learning time, travel, breaks and lab intensity.</p></span></div>
+            <div><span className="research-principle-icon teal"><CalendarDays size={20} /></span><span><h3>Balanced teaching</h3><p>Space for teaching, consultation and research.</p></span></div>
+            <div><span className="research-principle-icon amber"><Scale size={20} /></span><span><h3>Fairness over time</h3><p>More equitable opportunities across semesters.</p></span></div>
+          </div>
+        </section>
+
+        <section className="research-container research-community" aria-labelledby="community-heading">
+          <div className="research-section-label">
+            <h2 id="community-heading"><BarChart3 size={16} /> Community participation</h2>
+            <span>Aggregate responses only</span>
+          </div>
           <ResponseCounters />
-      </section>
+        </section>
 
-      <footer className="border-t border-zinc-200 bg-white">
-        <div className="mx-auto max-w-6xl px-5 py-8 text-xs leading-relaxed text-zinc-400">
-          <div className="font-bold text-zinc-500">
-            Fairness-Aware AI Routine Generator — Research Project 2025
-          </div>
-          <div className="mt-1">
-            University of Asia Pacific • Departmental thesis research survey • Responses are
-            anonymous and aggregated for analysis only.
-          </div>
+        <div className="research-container research-privacy-note"><Check size={15} /><p>Choosing an option reveals that question&apos;s results. Your answers are recorded only when you press <strong>Submit</strong>. This project is a research study, not a live timetable generator.</p></div>
+      </main>
+
+      <footer className="research-footer">
+        <div className="research-container research-footer-inner">
+          <span><Layers3 size={17} /> Fairness-Aware AI Routine Generator</span>
+          <span>Research Project · University of Asia Pacific</span>
         </div>
       </footer>
-    </main>
+    </div>
   );
 }

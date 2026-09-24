@@ -1,4 +1,5 @@
 import Link from "next/link";
+import HomeButton from "@/components/HomeButton";
 import RefreshButton from "@/components/RefreshButton";
 import { BarRow, RatingCard, StatTile } from "@/components/ResultCards";
 import { getForm2Results, type Form2Results } from "@/lib/results";
@@ -20,9 +21,7 @@ export default async function Form2ResultsPage() {
   return (
     <main className="mx-auto max-w-5xl px-5 py-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link href="/" className="text-sm font-semibold text-zinc-600 hover:text-black">
-          ← Home
-        </Link>
+        <HomeButton />
         <div className="flex flex-wrap items-center gap-2">
           <Link
             href="/results/form1"
@@ -34,18 +33,10 @@ export default async function Form2ResultsPage() {
         </div>
       </div>
 
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-black">Form 2 — live results</h1>
-          <p className="mt-1 text-zinc-600">
-            Time-slot rating survey. Average score per slot (1 = hate it, 5 = love it).
-          </p>
-        </div>
-        {data?.isFallback && (
-          <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
-            ✔ Zero-Config Storage Active
-          </span>
-        )}
+      <div className="mt-7 rounded-[26px] border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-fuchsia-50 p-6 sm:p-8 dark:border-sky-500/30 dark:from-[#17334b] dark:via-[#18243b] dark:to-[#322348]">
+        <span className="text-[10px] font-black uppercase tracking-[.18em] text-sky-700 dark:text-sky-200">Research insights · Form 02</span>
+        <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950 dark:text-white">Time-slot ratings &amp; fairness</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-slate-300">How the community rates seven daily class periods, long campus gaps and fairness across semesters.</p>
       </div>
 
       {error ? (

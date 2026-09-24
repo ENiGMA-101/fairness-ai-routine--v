@@ -1,4 +1,5 @@
 import Link from "next/link";
+import HomeButton from "@/components/HomeButton";
 import RefreshButton from "@/components/RefreshButton";
 import { DistributionCard, StatTile } from "@/components/ResultCards";
 import { getForm1Results, type Form1Results } from "@/lib/results";
@@ -18,9 +19,7 @@ export default async function Form1ResultsPage() {
   return (
     <main className="mx-auto max-w-5xl px-5 py-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link href="/" className="text-sm font-semibold text-zinc-600 hover:text-black">
-          ← Home
-        </Link>
+        <HomeButton />
         <div className="flex flex-wrap items-center gap-2">
           <Link
             href="/results/form2"
@@ -32,18 +31,10 @@ export default async function Form1ResultsPage() {
         </div>
       </div>
 
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-black">Form 1 — live results</h1>
-          <p className="mt-1 text-zinc-600">
-            Student &amp; teacher preference survey. Real-time distribution bars for all PDF questions.
-          </p>
-        </div>
-        {data?.isFallback && (
-          <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
-            ✔ Zero-Config Storage Active
-          </span>
-        )}
+      <div className="mt-7 rounded-[26px] border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-sky-50 p-6 sm:p-8 dark:border-violet-500/30 dark:from-[#29254b] dark:via-[#18243b] dark:to-[#183449]">
+        <span className="text-[10px] font-black uppercase tracking-[.18em] text-violet-700 dark:text-violet-200">Research insights · Form 01</span>
+        <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950 dark:text-white">Student &amp; teacher preferences</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-slate-300">See how submitted answers balance class times, gaps, lab load and fair choices. Questions stay in the original survey order here.</p>
       </div>
 
       {error ? (

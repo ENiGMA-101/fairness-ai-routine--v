@@ -10,12 +10,13 @@ import {
   Sparkles,
   BarChart3,
   Building2,
-  Home,
   MessageSquare,
   ShieldCheck,
 } from "lucide-react";
 import RatingPoll from "@/components/RatingPoll";
 import TimeSlotMatrix from "@/components/TimeSlotMatrix";
+import HomeButton from "@/components/HomeButton";
+import { useSurveyPollStats } from "@/lib/poll-stats-client";
 import { VisualFairness, VisualLongGapForm2 } from "@/components/Visuals";
 import { getBrowserId, isSubmitted, markSubmitted } from "@/lib/browser";
 import { DEPARTMENTS, TIME_SLOTS, shuffle } from "@/lib/survey";
@@ -37,24 +38,13 @@ export default function Form2Page() {
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [batchStats, setBatchStats] = useState<Record<string, { total: number; counts: Record<string, number>; percentages: Record<string, number> }>>({});
-  // Distinguishes "just submitted" from "already submitted earlier on this browser"
+  const { stats: batchStats, status: statsStatus } = useSurveyPollStats("form2");
 
   useEffect(() => {
     if (isSubmitted("form2")) {
       setSubmitted(true);
       setAlreadySubmitted(true);
     }
-  }, []);
-
-  // Preload ALL slot + question stats in one request
-  useEffect(() => {
-    void fetch("/api/form2/stats/all", { cache: "no-store" })
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
-        if (data && typeof data === "object") setBatchStats(data);
-      })
-      .catch(() => {});
   }, []);
 
   // Shuffle the two opinion rating questions on each entry; the matrix and feedback stay fixed
@@ -104,36 +94,29 @@ export default function Form2Page() {
         }),
       });
 
-      if (res.ok || res.status === 409) {
+      if (res.status === 409) {
+        markSubmitted("form2");
+        setAlreadySubmitted(true);
+        setSubmitted(true);
+        return;
+      }
+      if (res.ok) {
         markSubmitted("form2");
         setSubmitted(true);
         try {
-          confetti({
-            particleCount: 80,
-            spread: 70,
-            origin: { y: 0.6 },
-          });
+          confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
         } catch {
-          /* ignore */
+          /* animation is optional */
         }
         return;
       }
 
       const data = (await res.json().catch(() => ({}))) as { error?: string };
-      const rawError = data.error ?? `Submission failed (${res.status})`;
-      if (rawError.includes("Failed query") || rawError.includes("insert into")) {
-        markSubmitted("form2");
-        setSubmitted(true);
-        return;
-      }
-      setError(
-        res.status === 400
-          ? rawError
-          : "আপনার উত্তর নেওয়া যায়নি — অনুগ্রহ করে একটু পরে আবার চেষ্টা করুন। / Please try again in a moment.",
-      );
+      setError(res.status === 400 && data.error
+        ? data.error
+        : "আপনার উত্তর জমা হয়নি। অনুগ্রহ করে সংযোগ যাচাই করে আবার চেষ্টা করুন। / Your response was not saved. Please try again.");
     } catch {
-      markSubmitted("form2");
-      setSubmitted(true);
+      setError("সংযোগ পাওয়া যায়নি। আপনার উত্তর জমা হয়নি — পরে আবার চেষ্টা করুন। / Connection lost. Please retry.");
     } finally {
       setLoading(false);
     }
@@ -168,12 +151,7 @@ export default function Form2Page() {
             >
               <BarChart3 className="h-4 w-4" /> View Live Results
             </Link>
-            <Link
-              href="/"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-400 hover:text-zinc-600 pt-2"
-            >
-              <Home className="h-3.5 w-3.5" /> Back to Survey Home
-            </Link>
+            <HomeButton label="Back to survey home" />
           </div>
         </div>
       </div>
@@ -219,12 +197,7 @@ export default function Form2Page() {
               <BarChart3 className="h-4 w-4" /> View Time-Slot Ranking Dashboard
             </Link>
             {/* placeholder-removed */}
-            <Link
-              href="/"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-400 hover:text-zinc-600 pt-2"
-            >
-              <Home className="h-3.5 w-3.5" /> Back to Survey Home
-            </Link>
+            <HomeButton label="Back to survey home" />
           </div>
         </div>
       </div>
@@ -232,16 +205,11 @@ export default function Form2Page() {
   }
 
   return (
-    <div className="min-h-screen pb-16 bg-[#f6f5f2]">
+    <div className="min-h-screen bg-[#f6f5f2] pb-24 dark:bg-[#0a1326]">
       {/* Sticky Top Header */}
       <div className="sticky top-0 z-30 border-b border-zinc-200/80 bg-white/90 backdrop-blur-md">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3.5">
-          <Link
-            href="/"
-            className="flex items-center gap-1.5 text-sm font-bold text-zinc-700 hover:text-black transition"
-          >
-            <Home className="h-4 w-4" /> Home
-          </Link>
+          <HomeButton />
 
           <div className="flex items-center gap-3">
             <span className="text-xs font-bold text-zinc-500 tabular-nums">
@@ -263,21 +231,23 @@ export default function Form2Page() {
       </div>
 
       <div className="mx-auto max-w-3xl px-4 py-8">
-        {/* Hero Card */}
-        <div className="mb-6 rounded-[32px] border border-zinc-200/80 bg-white p-7 md:p-9 shadow-sm">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-700">
-            <Sparkles className="h-3.5 w-3.5" /> Survey Form 2 • Time-Slot Rating
+        {/* Research introduction */}
+        <div className="mb-6 overflow-hidden rounded-[28px] border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-fuchsia-50 p-6 shadow-sm sm:p-8 dark:border-sky-500/30 dark:from-[#17334b] dark:via-[#18243b] dark:to-[#332248]">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-white/85 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/15 dark:text-sky-200">
+            <Sparkles className="h-3.5 w-3.5" /> Research survey · Form 02
           </div>
-          <h1 className="mt-3 text-3xl md:text-4xl font-black leading-tight tracking-tight text-zinc-900">
-            Fairness-Aware AI Routine Generator
+          <h1 className="mt-4 text-[27px] font-black leading-tight tracking-tight text-slate-950 sm:text-[34px] dark:text-white">
+            Fairness-Aware AI <span className="text-sky-700 dark:text-sky-300">Routine Generator</span>
           </h1>
-          <p className="mt-1 text-lg font-bold text-violet-600">
-            Daily Time-Slot Rating &amp; Fairness Survey
+          <p className="mt-1 text-base font-bold text-slate-700 dark:text-slate-200">Time-slot Rating &amp; Fairness Survey</p>
+          <p className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+            আপনার পছন্দের ক্লাসের সময় রেট করুন। একটি রেটিং বেছে নিলে সেই প্রশ্নের সব রেটিংয়ের ভোটসংখ্যা ও শতকরা ফল দেখতে পাবেন। ভোট গণনা হবে শুধু Submit চাপার পর।
           </p>
-          <p className="mt-3 text-sm md:text-base text-zinc-600 leading-relaxed">
-            প্রতিটি ক্লাস স্লটকে ১ (Hate it) থেকে ৫ (Love it) রেটিং দিন। মাঝখানের দীর্ঘ বিরতি এবং
-            একাধিক সেমিস্টারের ন্যায্যতার বিষয়ে আপনার দৃষ্টিভঙ্গি প্রদান করুন।
-          </p>
+          <div className="mt-4 flex flex-wrap gap-2 text-[11px] font-bold">
+            <span className="rounded-full bg-sky-100 px-3 py-1.5 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200">7 daily slots</span>
+            <span className="rounded-full bg-fuchsia-100 px-3 py-1.5 text-fuchsia-800 dark:bg-fuchsia-500/20 dark:text-fuchsia-200">Fairness over time</span>
+            <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200">Anonymous</span>
+          </div>
         </div>
 
         {/* Role Selection */}
@@ -364,6 +334,7 @@ export default function Form2Page() {
           values={timeSlots}
           onChange={(id, rating) => setTimeSlots((prev) => ({ ...prev, [id]: rating }))}
           initialStats={batchStats}
+          statsStatus={statsStatus}
         />
 
         {/* Questions 2 & 3: Opinion ratings — shuffled on each entry */}
@@ -376,6 +347,7 @@ export default function Form2Page() {
               questionId={qid}
               index={2 + idx}
               initialStats={batchStats}
+              statsStatus={statsStatus}
               title={
                 isLongGap
                   ? "Long Campus Gaps Between Classes (Idle Wait Time) *"

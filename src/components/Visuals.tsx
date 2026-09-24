@@ -105,7 +105,7 @@ export function VisualPacked() {
         <div className="flex items-center justify-between">
           <span className="font-bold text-emerald-900">4 Intense Days + 1 Day OFF</span>
           <span className="rounded-full bg-emerald-600 px-2.5 py-0.5 text-[10px] font-black text-white shadow">
-            🎉 100% OFF DAY
+            🎉 FULL DAY OFF
           </span>
         </div>
         <div className="mt-3 grid grid-cols-5 gap-1.5 text-center">

@@ -4,54 +4,59 @@ import { form2Responses } from "@/db/schema";
 import { FORM2_ROW_KEYS } from "@/lib/results";
 import { FORM2_COLUMN_KEYS } from "@/lib/survey";
 import { getAllForm2 } from "@/lib/storage";
+import { cachedValue } from "@/lib/stats-cache";
 
 export const dynamic = "force-dynamic";
 
 type QStats = { total: number; counts: Record<string, number>; percentages: Record<string, number> };
 
-function compute(values: (string | number | null)[]): QStats {
+type StatsMap = Record<string, QStats>;
+
+function tally(values: (string | number | null)[]): QStats {
   const counts: Record<string, number> = {};
   let total = 0;
-  for (const v of values) {
-    if (v === null || v === undefined || v === "") continue;
-    const k = String(v);
-    counts[k] = (counts[k] ?? 0) + 1;
+  for (const value of values) {
+    if (value === null || value === undefined || value === "") continue;
+    const key = String(value);
+    counts[key] = (counts[key] ?? 0) + 1;
     total += 1;
   }
   const percentages: Record<string, number> = {};
-  for (const [k, c] of Object.entries(counts)) {
-    percentages[k] = total ? Math.round((c / total) * 100) : 0;
+  for (const [key, count] of Object.entries(counts)) {
+    percentages[key] = total ? Math.round((count / total) * 100) : 0;
   }
   return { total, counts, percentages };
 }
 
-export async function GET() {
-  const keys = FORM2_COLUMN_KEYS;
-
+async function readAll(): Promise<StatsMap> {
   if (isDatabaseConfigured() && !isDatabaseMarkedBroken()) {
     try {
+      // Seven slots plus gap/fairness from one read, rather than nine click requests.
       const rows = await db.select().from(form2Responses);
-      const result: Record<string, QStats> = {};
-      for (const key of keys) {
-        const col = FORM2_ROW_KEYS[key];
-        const vals = rows.map((r) => (r[col] as string | null) ?? null);
-        result[key] = compute(vals);
+      const result: StatsMap = {};
+      for (const key of FORM2_COLUMN_KEYS) {
+        const column = FORM2_ROW_KEYS[key];
+        result[key] = tally(rows.map((row) => (row[column] as string | number | null) ?? null));
       }
-      return NextResponse.json(result);
-    } catch (err) {
-      markDatabaseBroken(err instanceof Error ? err.message : String(err));
+      return result;
+    } catch (error) {
+      markDatabaseBroken(error instanceof Error ? error.message : String(error));
     }
   }
 
-  const records = getAllForm2();
-  const result: Record<string, QStats> = {};
-  for (const key of keys) {
-    const col = FORM2_ROW_KEYS[key];
-    const vals = records.map((r) => {
-      const val = (r as unknown as Record<string, unknown>)[col];
-      return val !== null && val !== undefined ? String(val) : null;
-    });
-    result[key] = compute(vals);
+  const rows = getAllForm2();
+  const result: StatsMap = {};
+  for (const key of FORM2_COLUMN_KEYS) {
+    const column = FORM2_ROW_KEYS[key];
+    result[key] = tally(rows.map((row) => {
+      const value = (row as unknown as Record<string, unknown>)[column];
+      return value === null || value === undefined ? null : String(value);
+    }));
   }
-  return NextResponse.json(result);
+  return result;
+}
+
+export async function GET() {
+  const data = await cachedValue("poll-stats-form2", 12_000, readAll);
+  return NextResponse.json(data, { headers: { "Cache-Control": "private, no-store" } });
 }

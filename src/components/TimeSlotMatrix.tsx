@@ -1,163 +1,98 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Sun, Moon, Sunrise, Clock, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { Sunrise, Sun, Moon, Sparkles } from "lucide-react";
 import { TIME_SLOTS } from "@/lib/survey";
-import { useStats, type Stats } from "./PollCard";
+import type { PollStatsMap } from "@/lib/poll-stats-client";
 
 type Props = {
   values: Record<string, number>;
   onChange: (id: string, rating: number) => void;
-  initialStats?: Record<string, Stats> | null;
+  initialStats?: PollStatsMap | null;
+  statsStatus?: "loading" | "ready" | "error";
 };
 
-const RATING_EMOJIS = [
-  { n: 1, emoji: "😡", label: "Hate it" },
+const SCALE = [
+  { n: 1, emoji: "😣", label: "Avoid" },
   { n: 2, emoji: "🙁", label: "Dislike" },
   { n: 3, emoji: "😐", label: "Neutral" },
   { n: 4, emoji: "🙂", label: "Like" },
-  { n: 5, emoji: "🤩", label: "Love it" },
+  { n: 5, emoji: "🤩", label: "Love" },
 ];
 
-function getSlotIcon(id: string) {
-  if (id.includes("8_00") || id.includes("9_30")) {
-    return <Sunrise className="h-4 w-4 text-amber-500" />;
-  }
-  if (id.includes("11_00") || id.includes("12_30")) {
-    return <Sun className="h-4 w-4 text-amber-600" />;
-  }
-  if (id.includes("14_00") || id.includes("15_30")) {
-    return <Sun className="h-4 w-4 text-orange-500" />;
-  }
-  return <Moon className="h-4 w-4 text-indigo-500" />;
+function SlotIcon({ id }: { id: string }) {
+  if (id.includes("8_00") || id.includes("9_30")) return <Sunrise className="h-4 w-4 text-amber-500" />;
+  if (id.includes("17_00")) return <Moon className="h-4 w-4 text-violet-500" />;
+  return <Sun className="h-4 w-4 text-sky-500" />;
 }
 
-export default function TimeSlotMatrix({ values, onChange, initialStats }: Props) {
-  const { stats, load } = useStats("form2");
-  // Which slots THIS user has clicked — percentages hidden until then.
-  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+export default function TimeSlotMatrix({ values, onChange, initialStats, statsStatus = "loading" }: Props) {
+  const [clickedSlots, setClickedSlots] = useState<Record<string, boolean>>({});
+  const ratedCount = TIME_SLOTS.filter(({ id }) => values[id] !== undefined).length;
 
-  // Preload all slot stats on mount in one background batch
-  useEffect(() => {
-    for (const slot of TIME_SLOTS) {
-      void load(slot.id);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const select = (id: string, rating: number) => {
-    onChange(id, rating);
-    setRevealed((prev: Record<string, boolean>) => ({ ...prev, [id]: true }));
-    void load(id);
-  };
-
-  const ratedCount = TIME_SLOTS.filter((s) => Boolean(values[s.id])).length;
+  function select(id: string, rating: number) {
+    onChange(id, rating); // UI updates immediately; the database is read once for the entire form
+    setClickedSlots((previous) => ({ ...previous, [id]: true }));
+  }
 
   return (
-    <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm transition-all hover:shadow-md">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-100 pb-4">
+    <section className="survey-card mb-6 rounded-[26px] border border-slate-200 bg-white p-5 shadow-[0_12px_36px_-28px_rgba(38,48,84,0.42)] sm:p-7 dark:border-slate-700 dark:bg-[#18233b]">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-5 dark:border-slate-700">
         <div>
           <div className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-violet-100 text-xs font-black text-violet-700">
-              1
-            </span>
-            <h3 className="text-[17px] font-bold text-zinc-900">
-              Time-Slot Preference Rating *
-            </h3>
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-100 text-xs font-black text-sky-700 dark:bg-sky-500/20 dark:text-sky-200">1</span>
+            <h3 className="text-[16px] font-bold text-slate-900 sm:text-[17px] dark:text-white">Time-slot preference *</h3>
           </div>
-          <p className="mt-1 text-xs text-zinc-500">
-            Rate each class time slot from 1 (Hate it) to 5 (Love it).
-          </p>
+          <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">Rate each class period from 1 (avoid) to 5 (love). Results reveal per slot after selection.</p>
         </div>
-        <span className="rounded-full bg-violet-50 px-3 py-1 text-xs font-bold text-violet-700">
-          {ratedCount} of {TIME_SLOTS.length} rated
-        </span>
+        <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-bold text-sky-700 dark:bg-sky-500/20 dark:text-sky-200">{ratedCount} / {TIME_SLOTS.length} rated</span>
       </div>
 
-      {/* Rating Legend Header */}
-      <div className="mt-5 hidden sm:grid grid-cols-[150px_repeat(5,1fr)] gap-2 pb-2 text-center text-xs font-semibold text-zinc-500">
-        <div className="text-left pl-2">Time Slot</div>
-        {RATING_EMOJIS.map((r) => (
-          <div key={r.n} className="flex flex-col items-center justify-center">
-            <span className="text-base">{r.emoji}</span>
-            <span className="text-[11px] mt-0.5">{r.label}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Slots List */}
-      <div className="mt-3 space-y-4">
+      <div className="mt-5 space-y-3">
         {TIME_SLOTS.map((slot) => {
-          const current = initialStats?.[slot.id] ?? stats[slot.id];
           const chosen = values[slot.id];
-
+          const stats = initialStats?.[slot.id] ?? null;
+          const showAll = !!clickedSlots[slot.id] && stats !== null;
           return (
-            <div
-              key={slot.id}
-              className="rounded-2xl border border-zinc-200/80 bg-zinc-50/50 p-4 transition-all hover:bg-zinc-50 hover:border-zinc-300"
-            >
-              <div className="grid grid-cols-1 sm:grid-cols-[150px_repeat(5,1fr)] items-center gap-3">
-                {/* Slot Info */}
-                <div className="flex items-center gap-2.5">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-white border border-zinc-200 shadow-sm shrink-0">
-                    {getSlotIcon(slot.id)}
-                  </span>
-                  <div>
-                    <div className="text-sm font-bold text-zinc-900">{slot.label}</div>
-                    <div className="text-[11px] font-medium text-zinc-400">{slot.range}</div>
-                  </div>
+            <div key={slot.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 sm:p-4 dark:border-slate-600 dark:bg-[#1e2c47]">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm dark:bg-slate-700"><SlotIcon id={slot.id} /></span>
+                <div className="flex-1">
+                  <div className="text-sm font-bold text-slate-900 dark:text-white">{slot.label}</div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400">{slot.range}</div>
                 </div>
-
-                {/* Rating 1-5 Buttons */}
-                <div className="grid grid-cols-5 gap-1.5 sm:col-span-5">
-                  {RATING_EMOJIS.map((r) => {
-                    const active = chosen === r.n;
-                    return (
-                      <button
-                        key={r.n}
-                        type="button"
-                        onClick={() => select(slot.id, r.n)}
-                        className={`flex flex-col items-center justify-center rounded-xl border-2 py-2.5 transition-all ${
-                          active
-                            ? "border-violet-600 bg-violet-600 text-white shadow-md scale-[1.03]"
-                            : "border-zinc-200 bg-white text-zinc-700 hover:border-violet-300 hover:bg-violet-50/30"
-                        }`}
-                      >
-                        <span className="text-base sm:text-lg">{r.emoji}</span>
-                        <span className="mt-0.5 text-xs font-black">{r.n}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+                {showAll && <span className="rounded-full bg-sky-100 px-2.5 py-1 text-[10px] font-semibold text-sky-800 dark:bg-sky-500/20 dark:text-sky-200">{stats.total} responses</span>}
               </div>
-
-              {/* Live Percentages underneath each slot — only after user rates this slot */}
-              {revealed[slot.id] && current ? (
-                <div className="mt-3 pt-3 border-t border-zinc-200/60">
-                  <div className="flex items-center justify-between text-[11px] text-zinc-500 mb-1.5">
-                    <span className="font-semibold text-violet-700 flex items-center gap-1">
-                      <Sparkles className="h-3 w-3" /> Live rating distribution
-                    </span>
-                    <span>{current.total} response{current.total === 1 ? "" : "s"}</span>
-                  </div>
-                  <div className="grid grid-cols-5 gap-1.5 text-center">
-                    {[1, 2, 3, 4, 5].map((n) => {
-                      const pct = current.percentages?.[String(n)] ?? 0;
-                      return (
-                        <div key={n} className="rounded-lg bg-white p-1 border border-zinc-200">
-                          <div className="h-1.5 overflow-hidden rounded-full bg-zinc-100">
-                            <div
-                              className="h-full rounded-full bg-violet-500 transition-all duration-500"
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                          <div className="mt-1 text-[10px] font-bold text-zinc-600">{pct}%</div>
-                        </div>
-                      );
-                    })}
-                  </div>
+              <div className="mt-3 grid grid-cols-5 gap-1.5" role="group" aria-label={`Rate ${slot.label}`}>
+                {SCALE.map(({ n, emoji, label }) => {
+                  const selected = chosen === n;
+                  const percent = stats?.percentages?.[String(n)] ?? 0;
+                  const count = stats?.counts?.[String(n)] ?? 0;
+                  return (
+                    <button
+                      key={n}
+                      type="button"
+                      aria-label={`${slot.label}: ${n} of 5 — ${label}`}
+                      aria-pressed={selected}
+                      onClick={() => select(slot.id, n)}
+                      className={`flex min-h-[60px] flex-col items-center justify-center rounded-xl border-[1.5px] px-1 py-1.5 text-xs font-bold transition-colors ${selected
+                        ? "border-sky-500 bg-sky-100 text-sky-900 dark:border-sky-400 dark:bg-sky-400/20 dark:text-sky-100"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-sky-300 dark:border-slate-600 dark:bg-[#18233b] dark:text-slate-300 dark:hover:border-sky-400"}`}
+                    >
+                      <span aria-hidden="true" className="text-base">{emoji}</span><span>{n}</span>
+                      {showAll && <span className={`rounded-full px-1.5 text-[10px] font-black ${selected ? "bg-sky-600 text-white dark:bg-sky-400 dark:text-slate-950" : "bg-slate-100 text-slate-700 dark:bg-slate-600 dark:text-slate-100"}`}>{percent}%</span>}
+                      {showAll && <span className="text-[9px] font-normal text-slate-500 dark:text-slate-300">{count} vote{count === 1 ? "" : "s"}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+              {showAll && (
+                <div className="mt-2.5 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400" aria-live="polite">
+                  <Sparkles className="h-3.5 w-3.5 shrink-0 text-sky-600 dark:text-sky-400" />
+                  <span>All five ratings shown · your choice counts only after Submit</span>
                 </div>
-              ) : null}
+              )}
+              {clickedSlots[slot.id] && !stats && <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400" aria-live="polite">{statsStatus === "error" ? "Community results unavailable right now; your selection is ready." : "Fetching community results… your selection is ready."}</p>}
             </div>
           );
         })}

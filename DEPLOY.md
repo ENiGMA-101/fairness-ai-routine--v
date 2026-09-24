@@ -1,67 +1,31 @@
-# Fairness-Aware AI Routine Generator — Vercel Deployment Guide
+# Public launch checklist · Fairness-Aware AI Routine Generator
 
-Deploy the research survey to Vercel in less than 60 seconds.
+The landing page links straight to Form 1 and Form 2. Visitors can choose a light or dark theme. Responses are anonymous and shown as aggregate poll results.
 
-## 🔐 Public-launch checklist (professional deployment)
+## Deploy to Vercel
 
-- [ ] **Delete `fairness-app.zip` from the repository/public folder** if you ever copied it there — source code must never be public. In this project the archive is generated at the project root and served only through `/api/source?token=…`.
-- [ ] **Set `ADMIN_TOKEN`** in Vercel → Settings → Environment Variables (any long random string). It protects `/api/source`, `/api/export` and the `/setup` admin console.
-- [ ] **Do not expose CSV export publicly** — export buttons only exist inside `/setup` behind the token.
-- [ ] The public site only shows: the two forms, aggregate live results, and research context.
+1. Push the source project to a **private** repository and import it in Vercel (or unzip your locally generated `fairness-app.zip` and import those files).
+2. Connect a **persistent PostgreSQL database**. In Vercel: Project → Storage → create/connect Neon. Vercel usually supplies `POSTGRES_URL`. Alternatively create a Neon or Supabase database and set `DATABASE_URL` to its connection string.
+3. In Vercel → Settings → Environment Variables, add a random `ADMIN_TOKEN` **at least 24 characters long** (e.g. generated with `openssl rand -hex 32`). Keep it private. It protects `/setup`, CSV export and source download. If omitted, those endpoints are disabled.
+4. Deploy, then check `/api/health` for database connectivity. Tables are initialized automatically; `db/init.sql` is provided for manual setup if needed.
+5. Submit **one test response** on each form and confirm they remain in the same database after a redeploy. Remove test responses directly in your DB before inviting participants.
 
-## 🚀 Instant 1-Click Deploy (Zero Database Setup Required!)
+## Important: no database ≠ durable data
 
-**Good news:** You do **NOT** need to configure any database to run this survey on Vercel!
-The app includes a built-in zero-config storage engine (`src/lib/storage.ts`) with live polling percentages, duplicate browser protection, and 1-click CSV/Excel export.
+The optional local fallback writes to the server's temporary filesystem. Vercel functions have ephemeral, independently scaled filesystems: responses saved there can disappear or disagree across instances. **For public research, set `DATABASE_URL` or `POSTGRES_URL` and verify `/api/health` before sharing your URL.** Do not treat fallback counts or demo rows as real research data.
 
-### 3 Steps to Deploy:
-1. **Unzip `fairness-app.zip`** (or push to GitHub).
-2. Go to [vercel.com](https://vercel.com) → Click **Add New… → Project** → Import your repository.
-3. Click **Deploy**. **No environment variables needed!**
+## Privacy
 
-Your survey is immediately live with:
-- `/` — Modern landing page with live response counters
-- `/form1` — 11 student questions + 7 teacher questions (Bangla & English) with graphical infographics
-- `/form2` — 7 daily time-slot ratings (1–5 scale), gap tolerance, fairness
-- `/results/form1` & `/results/form2` — Live graphical dashboards
-- `/api/export?form=form1&format=csv` — 1-click CSV export for Excel / Google Sheets
+- Public pages never expose CSV/JSON exports, source archives or database diagnostics.
+- `fairness-app.zip` is created at the repository root with `node scripts/make-zip.mjs`, is excluded by `.gitignore`, and is not in `public/`.
+- Without a strong `ADMIN_TOKEN`, private API routes reject requests.
+- The browser ID only prevents a repeat response from that browser; it is not a secure identity system.
+- Each question starts with percentages hidden. After choosing any option, **all options in that question** reveal their percentages and submitted vote counts. Changing the selection never casts a vote; Submit records it.
 
----
+## Verify before launch
 
-## 🗄️ (Optional) Connecting a PostgreSQL Database (Neon or Supabase)
-
-If you wish to use an external PostgreSQL database, the app automatically supports it and **auto-creates all tables** (`CREATE TABLE IF NOT EXISTS`) without you ever running manual SQL scripts.
-
-### Option A: Neon Postgres in Vercel Storage (Easiest)
-1. In your project dashboard on Vercel, click the **Storage** tab.
-2. Click **Create Database** → Select **Neon**.
-3. Choose a region and click **Connect to Project**.
-4. Vercel automatically sets `POSTGRES_URL`.
-5. Trigger a **Redeploy** in Vercel. Done!
-
-### Option B: Free Neon.tech Account (100% Free Forever)
-1. Sign up at [neon.tech](https://neon.tech) (takes 10 seconds with Google/GitHub, no credit card).
-2. Click **Create Project** → copy the connection string:
-   ```text
-   postgresql://user:password@ep-xyz.neon.tech/neondb?sslmode=require
-   ```
-3. In your Vercel Project → **Settings** → **Environment Variables**:
-   - Name: `DATABASE_URL`
-   - Value: `postgresql://user:password@ep-xyz.neon.tech/neondb?sslmode=require`
-4. Click **Save** and trigger a **Redeploy**.
-
-### Option C: Supabase
-1. Create a project on [supabase.com](https://supabase.com).
-2. Go to **Project Settings** → **Database** → under **Connection string**, select **URI**.
-3. Choose **Transaction mode** (port `6543`).
-4. Set it as `DATABASE_URL` in Vercel Environment Variables.
-
----
-
-## 🛠️ Features Included
-- **Exact PDF Preserved**: Exact questions from UAP routine research surveys in both Bengali and English.
-- **Graphical Infographics**: Every question has a visual comparison card (morning/evening rush, 4-day packed vs 5-day week, timeline gaps, lab load, student vs teacher balance).
-- **Time-Slot Matrix**: Interactive 7-slot rating board with emojis (😡 1 to 🤩 5) and live distribution bars.
-- **Duplicate Protection**: One response per browser via anonymous localStorage ID.
-- **CSV / Excel Export**: Download responses anytime from the dashboard.
-- **Auto-Healing Schema**: If a database is connected, all tables are created automatically on the fly.
+- `/form1` and `/form2`: options begin without percentages. Click Option A: both A **and** B show percentages and submitted vote counts. Click B: selection changes immediately, while counts stay unchanged until Submit.
+- Switch dark/light, then refresh: the chosen theme remains.
+- Visit a submitted form again: the already-submitted screen appears.
+- Open `/api/export` and `/api/source` without an admin token: both return `401`.
+- `/results/form1` and `/results/form2` show responses from your persistent database in the original survey order.
