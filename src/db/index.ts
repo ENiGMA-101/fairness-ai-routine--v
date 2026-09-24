@@ -98,7 +98,8 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 CREATE TABLE IF NOT EXISTS form1_responses (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  browser_id text UNIQUE NOT NULL,
+  browser_id text NOT NULL,
+  survey_version integer NOT NULL DEFAULT 2,
   role text NOT NULL,
   department text NOT NULL,
   department_other text,
@@ -120,12 +121,15 @@ CREATE TABLE IF NOT EXISTS form1_responses (
   q_faculty_conflict text,
   q_compensate text,
   q_conflict_teacher text,
-  created_at timestamptz NOT NULL DEFAULT now()
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT form1_role_check CHECK (role IN ('Student', 'Teacher')),
+  CONSTRAINT form1_browser_version_unique UNIQUE (browser_id, survey_version)
 );
 
 CREATE TABLE IF NOT EXISTS form2_responses (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  browser_id text UNIQUE NOT NULL,
+  browser_id text NOT NULL,
+  survey_version integer NOT NULL DEFAULT 2,
   role text NOT NULL,
   department text NOT NULL,
   department_other text,
@@ -139,8 +143,91 @@ CREATE TABLE IF NOT EXISTS form2_responses (
   long_gap_rating int NOT NULL,
   fairness_rating int NOT NULL,
   feedback text,
-  created_at timestamptz NOT NULL DEFAULT now()
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT form2_role_check CHECK (role IN ('Student', 'Teacher')),
+  CONSTRAINT form2_rating_range_check CHECK (
+    time_slot_8_00 BETWEEN 1 AND 5 AND time_slot_9_30 BETWEEN 1 AND 5 AND
+    time_slot_11_00 BETWEEN 1 AND 5 AND time_slot_12_30 BETWEEN 1 AND 5 AND
+    time_slot_14_00 BETWEEN 1 AND 5 AND time_slot_15_30 BETWEEN 1 AND 5 AND
+    time_slot_17_00 BETWEEN 1 AND 5 AND long_gap_rating BETWEEN 1 AND 5 AND
+    fairness_rating BETWEEN 1 AND 5
+  ),
+  CONSTRAINT form2_browser_version_unique UNIQUE (browser_id, survey_version)
 );
+
+-- Upgrade existing pre-versioned installations without mixing old answers.
+ALTER TABLE form1_responses ADD COLUMN IF NOT EXISTS survey_version integer;
+ALTER TABLE form2_responses ADD COLUMN IF NOT EXISTS survey_version integer;
+UPDATE form1_responses SET survey_version = 1 WHERE survey_version IS NULL;
+UPDATE form2_responses SET survey_version = 1 WHERE survey_version IS NULL;
+ALTER TABLE form1_responses ALTER COLUMN survey_version SET DEFAULT 2;
+ALTER TABLE form2_responses ALTER COLUMN survey_version SET DEFAULT 2;
+ALTER TABLE form1_responses ALTER COLUMN survey_version SET NOT NULL;
+ALTER TABLE form2_responses ALTER COLUMN survey_version SET NOT NULL;
+ALTER TABLE form1_responses DROP CONSTRAINT IF EXISTS form1_responses_browser_id_key;
+ALTER TABLE form1_responses DROP CONSTRAINT IF EXISTS form1_responses_browser_id_unique;
+ALTER TABLE form2_responses DROP CONSTRAINT IF EXISTS form2_responses_browser_id_key;
+ALTER TABLE form2_responses DROP CONSTRAINT IF EXISTS form2_responses_browser_id_unique;
+CREATE UNIQUE INDEX IF NOT EXISTS form1_browser_version_unique ON form1_responses (browser_id, survey_version);
+CREATE UNIQUE INDEX IF NOT EXISTS form2_browser_version_unique ON form2_responses (browser_id, survey_version);
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'form1_v2_answer_domain_check') THEN
+    ALTER TABLE form1_responses ADD CONSTRAINT form1_v2_answer_domain_check CHECK (
+      survey_version <> 2 OR (
+        (q_avoid IS NULL OR q_avoid IN ('morning','evening')) AND
+        (q_weekly_off IS NULL OR q_weekly_off IN ('one_day_off','daily')) AND
+        (q_between_classes IS NULL OR q_between_classes IN ('back_to_back','with_break')) AND
+        (q_extra_time IS NULL OR q_extra_time IN ('yes','no')) AND
+        (q_long_gap IS NULL OR q_long_gap IN ('same_day','different_day')) AND
+        (q_midday_break IS NULL OR q_midday_break IN ('mandatory','flexible')) AND
+        (q_max_hours IS NULL OR q_max_hours IN ('4_hours','6_hours')) AND
+        (q_lab_cap IS NULL OR q_lab_cap IN ('one','two')) AND
+        (q_priority_group IS NULL OR q_priority_group IN ('seniors','juniors')) AND
+        (q_conflict_student IS NULL OR q_conflict_student IN ('students_first','teacher_first')) AND
+        (q_teaching_schedule IS NULL OR q_teaching_schedule IN ('less_days','daily_less')) AND
+        (q_zero_day IS NULL OR q_zero_day IN ('yes','no')) AND
+        (q_consecutive IS NULL OR q_consecutive IN ('continuous','with_break')) AND
+        (q_gap_pref IS NULL OR q_gap_pref IN ('no_gap','consultation')) AND
+        (q_faculty_conflict IS NULL OR q_faculty_conflict IN ('seniority_workload','semester_rotation')) AND
+        (q_compensate IS NULL OR q_compensate IN ('yes','no')) AND
+        (q_conflict_teacher IS NULL OR q_conflict_teacher IN ('students_first','teacher_first'))
+      )
+    ) NOT VALID;
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'form1_v2_role_completeness_check') THEN
+    ALTER TABLE form1_responses ADD CONSTRAINT form1_v2_role_completeness_check CHECK (
+      survey_version <> 2 OR
+      (role = 'Student' AND semester IS NOT NULL AND q_avoid IS NOT NULL AND q_weekly_off IS NOT NULL AND
+       q_between_classes IS NOT NULL AND q_extra_time IS NOT NULL AND q_long_gap IS NOT NULL AND
+       q_midday_break IS NOT NULL AND q_max_hours IS NOT NULL AND q_lab_cap IS NOT NULL AND
+       q_priority_group IS NOT NULL AND q_conflict_student IS NOT NULL AND
+       q_teaching_schedule IS NULL AND q_zero_day IS NULL AND q_consecutive IS NULL AND q_gap_pref IS NULL AND
+       q_faculty_conflict IS NULL AND q_compensate IS NULL AND q_conflict_teacher IS NULL)
+      OR
+      (role = 'Teacher' AND semester IS NULL AND q_avoid IS NULL AND q_weekly_off IS NULL AND
+       q_between_classes IS NULL AND q_extra_time IS NULL AND q_long_gap IS NULL AND q_midday_break IS NULL AND
+       q_max_hours IS NULL AND q_lab_cap IS NULL AND q_priority_group IS NULL AND q_conflict_student IS NULL AND
+       q_teaching_schedule IS NOT NULL AND q_zero_day IS NOT NULL AND q_consecutive IS NOT NULL AND
+       q_gap_pref IS NOT NULL AND q_faculty_conflict IS NOT NULL AND q_compensate IS NOT NULL AND
+       q_conflict_teacher IS NOT NULL)
+    ) NOT VALID;
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'form2_rating_range_check') THEN
+    ALTER TABLE form2_responses ADD CONSTRAINT form2_rating_range_check CHECK (
+      time_slot_8_00 BETWEEN 1 AND 5 AND time_slot_9_30 BETWEEN 1 AND 5 AND
+      time_slot_11_00 BETWEEN 1 AND 5 AND time_slot_12_30 BETWEEN 1 AND 5 AND
+      time_slot_14_00 BETWEEN 1 AND 5 AND time_slot_15_30 BETWEEN 1 AND 5 AND
+      time_slot_17_00 BETWEEN 1 AND 5 AND long_gap_rating BETWEEN 1 AND 5 AND fairness_rating BETWEEN 1 AND 5
+    ) NOT VALID;
+  END IF;
+END $$;
 `;
 
 /**

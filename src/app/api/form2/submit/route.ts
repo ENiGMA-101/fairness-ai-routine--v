@@ -2,12 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db, ensureTablesExist, isDatabaseConfigured, markDatabaseBroken } from "@/db";
 import { form2Responses } from "@/db/schema";
 import { addForm2Response } from "@/lib/storage";
-import { DEPARTMENTS, TIME_SLOTS } from "@/lib/survey";
+import { DEPARTMENTS, ROLE_OPTIONS, SURVEY_VERSION, TIME_SLOTS } from "@/lib/survey";
 import { invalidate } from "@/lib/stats-cache";
 
 export const dynamic = "force-dynamic";
 
-const ROLES = ["Student", "Teacher"];
+const ROLES = ROLE_OPTIONS.map((option) => option.value);
 
 type Body = {
   browser_id?: string;
@@ -69,9 +69,10 @@ export async function POST(req: NextRequest) {
 
   const storagePayload = {
     browserId,
+    surveyVersion: SURVEY_VERSION,
     role,
     department,
-    departmentOther,
+    departmentOther: department === "Other" ? departmentOther : null,
     timeSlot800: slotValues[0]!.value,
     timeSlot930: slotValues[1]!.value,
     timeSlot1100: slotValues[2]!.value,
@@ -91,7 +92,7 @@ export async function POST(req: NextRequest) {
       const inserted = await db
         .insert(form2Responses)
         .values(storagePayload)
-        .onConflictDoNothing({ target: form2Responses.browserId })
+        .onConflictDoNothing({ target: [form2Responses.browserId, form2Responses.surveyVersion] })
         .returning({ id: form2Responses.id });
 
       if (!inserted.length) {

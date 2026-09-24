@@ -8,7 +8,7 @@ The landing page links straight to Form 1 and Form 2. Visitors can choose a ligh
 2. Connect a **persistent PostgreSQL database**. In Vercel: Project → Storage → create/connect Neon. Vercel usually supplies `POSTGRES_URL`. Alternatively create a Neon or Supabase database and set `DATABASE_URL` to its connection string.
 3. In Vercel → Settings → Environment Variables, add a random `ADMIN_TOKEN` **at least 24 characters long** (e.g. generated with `openssl rand -hex 32`). Keep it private. It protects `/setup`, CSV export and source download. If omitted, those endpoints are disabled.
 4. Deploy, then check `/api/health` for database connectivity. Tables are initialized automatically; `db/init.sql` is provided for manual setup if needed.
-5. Submit **one test response** on each form and confirm they remain in the same database after a redeploy. Remove test responses directly in your DB before inviting participants.
+5. The application upgrades existing tables automatically: legacy responses are marked `survey_version = 1`, while the attached Google Forms specification is stored as version 2. Submit one v2 test response on each form, confirm it survives a redeploy, then remove the test rows before inviting participants.
 
 ## Important: no database ≠ durable data
 

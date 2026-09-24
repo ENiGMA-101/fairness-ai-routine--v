@@ -1,4 +1,7 @@
+import { SURVEY_VERSION } from "@/lib/survey";
+
 const ID_KEY = "fairness_browser_id";
+const submissionKey = (form: "form1" | "form2") => `${form}_submitted_v${SURVEY_VERSION}`;
 
 function randomId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -20,15 +23,15 @@ export function getBrowserId(): string {
 
 export function isSubmitted(form: "form1" | "form2"): boolean {
   if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(`${form}_submitted`) === "true";
+  return window.localStorage.getItem(submissionKey(form)) === "true";
 }
 
 export function markSubmitted(form: "form1" | "form2"): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(`${form}_submitted`, "true");
+  window.localStorage.setItem(submissionKey(form), "true");
 }
 
 export function resetSubmitted(form: "form1" | "form2"): void {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(`${form}_submitted`);
+  window.localStorage.removeItem(submissionKey(form));
 }

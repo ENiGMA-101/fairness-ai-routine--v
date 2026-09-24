@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Sunrise, Sun, Moon, Sparkles } from "lucide-react";
-import { TIME_SLOTS } from "@/lib/survey";
+import { FORM2_COPY, TIME_SLOTS } from "@/lib/survey";
 import type { PollStatsMap } from "@/lib/poll-stats-client";
 
 type Props = {
@@ -13,11 +13,11 @@ type Props = {
 };
 
 const SCALE = [
-  { n: 1, emoji: "😣", label: "Avoid" },
-  { n: 2, emoji: "🙁", label: "Dislike" },
+  { n: 1, emoji: "😣", label: "Hate it" },
+  { n: 2, emoji: "🙁", label: "Dislike it" },
   { n: 3, emoji: "😐", label: "Neutral" },
-  { n: 4, emoji: "🙂", label: "Like" },
-  { n: 5, emoji: "🤩", label: "Love" },
+  { n: 4, emoji: "🙂", label: "Like it" },
+  { n: 5, emoji: "🤩", label: "Love it" },
 ];
 
 function SlotIcon({ id }: { id: string }) {
@@ -41,9 +41,14 @@ export default function TimeSlotMatrix({ values, onChange, initialStats, statsSt
         <div>
           <div className="flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-100 text-xs font-black text-sky-700 dark:bg-sky-500/20 dark:text-sky-200">1</span>
-            <h3 className="text-[16px] font-bold text-slate-900 sm:text-[17px] dark:text-white">Time-slot preference *</h3>
+            <h3 className="text-[16px] font-bold text-slate-900 sm:text-[17px] dark:text-white">{FORM2_COPY.matrixTitle} *</h3>
           </div>
-          <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">Rate each class period from 1 (avoid) to 5 (love). Results reveal per slot after selection.</p>
+          <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">{FORM2_COPY.matrixInstruction}</p>
+          <p className="mt-1 text-xs font-semibold text-slate-700 dark:text-slate-200">{FORM2_COPY.matrixScale}</p>
+          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+            <span>{FORM2_COPY.rowsLabel}</span>
+            <span>{FORM2_COPY.columnsLabel}</span>
+          </div>
         </div>
         <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-bold text-sky-700 dark:bg-sky-500/20 dark:text-sky-200">{ratedCount} / {TIME_SLOTS.length} rated</span>
       </div>

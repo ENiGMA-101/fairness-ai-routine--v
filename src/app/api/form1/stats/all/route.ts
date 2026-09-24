@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { db, isDatabaseConfigured, isDatabaseMarkedBroken, markDatabaseBroken } from "@/db";
+import { eq } from "drizzle-orm";
+import { db, ensureTablesExist, isDatabaseConfigured, isDatabaseMarkedBroken, markDatabaseBroken } from "@/db";
 import { form1Responses } from "@/db/schema";
 import { FORM1_ROW_KEYS } from "@/lib/results";
-import { FORM1_COLUMN_KEYS } from "@/lib/survey";
+import { FORM1_COLUMN_KEYS, SURVEY_VERSION } from "@/lib/survey";
 import { getAllForm1 } from "@/lib/storage";
 import { cachedValue } from "@/lib/stats-cache";
 
@@ -31,8 +32,12 @@ function tally(values: (string | number | null)[]): QStats {
 async function readAll(): Promise<StatsMap> {
   if (isDatabaseConfigured() && !isDatabaseMarkedBroken()) {
     try {
+      await ensureTablesExist();
       // One database read for ALL questions, never one read per option click.
-      const rows = await db.select().from(form1Responses);
+      const rows = await db
+        .select()
+        .from(form1Responses)
+        .where(eq(form1Responses.surveyVersion, SURVEY_VERSION));
       const result: StatsMap = {};
       for (const key of FORM1_COLUMN_KEYS) {
         const column = FORM1_ROW_KEYS[key];

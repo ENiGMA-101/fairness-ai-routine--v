@@ -19,12 +19,13 @@ import HomeButton from "@/components/HomeButton";
 import { useSurveyPollStats } from "@/lib/poll-stats-client";
 import { VisualFairness, VisualLongGapForm2 } from "@/components/Visuals";
 import { getBrowserId, isSubmitted, markSubmitted } from "@/lib/browser";
-import { DEPARTMENTS, TIME_SLOTS, shuffle } from "@/lib/survey";
-
-const ROLES = ["Student", "Teacher"];
-
-type RatingQId = "long_gap_rating" | "fairness_rating";
-const RATING_QUESTION_IDS: RatingQId[] = ["long_gap_rating", "fairness_rating"];
+import {
+  DEPARTMENTS,
+  FORM2_COPY,
+  FORM2_DEPARTMENT_OPTIONS,
+  ROLE_OPTIONS,
+  TIME_SLOTS,
+} from "@/lib/survey";
 
 export default function Form2Page() {
   const [role, setRole] = useState("");
@@ -45,12 +46,6 @@ export default function Form2Page() {
       setSubmitted(true);
       setAlreadySubmitted(true);
     }
-  }, []);
-
-  // Shuffle the two opinion rating questions on each entry; the matrix and feedback stay fixed
-  const [ratingOrder, setRatingOrder] = useState<RatingQId[]>(RATING_QUESTION_IDS);
-  useEffect(() => {
-    setRatingOrder(shuffle(RATING_QUESTION_IDS));
   }, []);
 
   const total = 11;
@@ -250,71 +245,47 @@ export default function Form2Page() {
           </div>
         </div>
 
-        {/* Role Selection */}
+        {/* Profile questions — same wording and order as Google Forms */}
         <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
           <h3 className="text-[17px] font-bold text-zinc-900">Are you a Student or Teacher? *</h3>
-          <p className="mt-1 text-sm font-medium text-zinc-500">আপনার ভূমিকা নির্বাচন করুন</p>
           <div className="mt-4 grid grid-cols-2 gap-3">
-            {ROLES.map((r) => {
-              const selected = role === r;
+            {ROLE_OPTIONS.map((option) => {
+              const selected = role === option.value;
               return (
                 <button
-                  key={r}
+                  key={option.value}
                   type="button"
-                  onClick={() => setRole(r)}
-                  className={`flex items-center gap-3 rounded-2xl border-2 p-4 transition-all ${
-                    selected
-                      ? "border-violet-600 bg-violet-50/70 font-bold text-violet-950 shadow-md ring-2 ring-violet-500/20"
-                      : "border-zinc-200 bg-white font-medium text-zinc-700 hover:border-violet-300 hover:bg-zinc-50"
-                  }`}
+                  onClick={() => setRole(option.value)}
+                  className={`flex items-center gap-3 rounded-2xl border-2 p-4 transition-all ${selected
+                    ? "border-violet-600 bg-violet-50/70 font-bold text-violet-950 shadow-md ring-2 ring-violet-500/20"
+                    : "border-zinc-200 bg-white font-medium text-zinc-700 hover:border-violet-300 hover:bg-zinc-50"}`}
                 >
-                  <span
-                    className={`flex h-10 w-10 items-center justify-center rounded-xl shrink-0 ${
-                      selected ? "bg-violet-600 text-white" : "bg-zinc-100 text-zinc-500"
-                    }`}
-                  >
-                    {r === "Student" ? (
-                      <GraduationCap className="h-5 w-5" />
-                    ) : (
-                      <Briefcase className="h-5 w-5" />
-                    )}
+                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${selected ? "bg-violet-600 text-white" : "bg-zinc-100 text-zinc-500"}`}>
+                    {option.value === "Student" ? <GraduationCap className="h-5 w-5" /> : <Briefcase className="h-5 w-5" />}
                   </span>
-                  <div className="text-left">
-                    <div className="text-sm font-bold">{r}</div>
-                    <div className="text-xs text-zinc-400">
-                      {r === "Student" ? "শিক্ষার্থী" : "শিক্ষক"}
-                    </div>
-                  </div>
+                  <span className="text-sm font-bold">{option.label}</span>
                 </button>
               );
             })}
           </div>
         </section>
 
-        {/* Department Selection */}
         <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
-          <h3 className="text-[17px] font-bold text-zinc-900">
-            Which department do you belong to? *
-          </h3>
-          <p className="mt-1 text-sm font-medium text-zinc-500">আপনার বিভাগ নির্বাচন করুন</p>
-          <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-            {DEPARTMENTS.map((d) => {
-              const selected = department === d;
+          <h3 className="text-[17px] font-bold text-zinc-900">Which Department do you belong to? *</h3>
+          <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+            {FORM2_DEPARTMENT_OPTIONS.map((option) => {
+              const selected = department === option.value;
               return (
                 <button
-                  key={d}
+                  key={option.value}
                   type="button"
-                  onClick={() => setDepartment(d)}
-                  className={`flex items-center gap-2 rounded-2xl border-2 px-4 py-3 text-left transition-all ${
-                    selected
-                      ? "border-violet-600 bg-violet-50/70 font-bold text-violet-950 shadow-sm"
-                      : "border-zinc-200 bg-white font-medium text-zinc-700 hover:border-violet-300 hover:bg-zinc-50"
-                  }`}
+                  onClick={() => setDepartment(option.value)}
+                  className={`flex items-center gap-2 rounded-2xl border-2 px-4 py-3 text-left transition-all ${selected
+                    ? "border-violet-600 bg-violet-50/70 font-bold text-violet-950 shadow-sm"
+                    : "border-zinc-200 bg-white font-medium text-zinc-700 hover:border-violet-300 hover:bg-zinc-50"}`}
                 >
-                  <Building2
-                    className={`h-4 w-4 ${selected ? "text-violet-600" : "text-zinc-400"}`}
-                  />
-                  <span className="text-sm">{d}</span>
+                  <Building2 className={`h-4 w-4 ${selected ? "text-violet-600" : "text-zinc-400"}`} />
+                  <span className="text-sm">{option.label}</span>
                 </button>
               );
             })}
@@ -322,8 +293,8 @@ export default function Form2Page() {
           {department === "Other" && (
             <input
               value={departmentOther}
-              onChange={(e) => setDepartmentOther(e.target.value)}
-              placeholder="আপনার বিভাগের নাম লিখুন"
+              onChange={(event) => setDepartmentOther(event.target.value)}
+              placeholder="Other"
               className="mt-3.5 w-full rounded-2xl border-2 border-zinc-200 px-4 py-3 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
             />
           )}
@@ -337,39 +308,36 @@ export default function Form2Page() {
           statsStatus={statsStatus}
         />
 
-        {/* Questions 2 & 3: Opinion ratings — shuffled on each entry */}
-        {ratingOrder.map((qid, idx) => {
-          const isLongGap = qid === "long_gap_rating";
-          return (
-            <RatingPoll
-              key={qid}
-              form="form2"
-              questionId={qid}
-              index={2 + idx}
-              initialStats={batchStats}
-              statsStatus={statsStatus}
-              title={
-                isLongGap
-                  ? "Long Campus Gaps Between Classes (Idle Wait Time) *"
-                  : "Multi-Semester Fairness (Algorithmic Memory) *"
-              }
-              titleBn={
-                isLongGap
-                  ? "মনে করুন, আপনার একটি ক্লাস সকালে এবং পরের ক্লাসটি অনেক পরে — মাঝখানে ২ ঘণ্টারও বেশি ফাঁকা সময় আছে। এই দীর্ঘ বিরতি আপনার কাছে কেমন লাগে?"
-                  : "ধরুন, কোনো শিক্ষার্থী দল বা শিক্ষক এই সেমিস্টারে একটি খারাপ রুটিন পেলেন। এআই (AI)-এর কি এটি মনে রাখা উচিত এবং পরের সেমিস্টারে তাদের সুবিধা পুষিয়ে দেওয়ার চেষ্টা করা উচিত?"
-              }
-              leftLabel={
-                isLongGap ? "১ = একেবারেই অপছন্দ / সময়ের অপচয়" : "১ = না, প্রতি সেমিস্টার আলাদা হোক"
-              }
-              rightLabel={
-                isLongGap ? "৫ = এতে কোনো সমস্যা নেই / কাজে লাগে" : "৫ = হ্যাঁ, অবশ্যই পুষিয়ে দেওয়া উচিত"
-              }
-              value={isLongGap ? longGap : fairness}
-              onChange={isLongGap ? setLongGap : setFairness}
-              visual={isLongGap ? <VisualLongGapForm2 /> : <VisualFairness />}
-            />
-          );
-        })}
+        {/* Questions 2 and 3 — fixed Google Forms order */}
+        <RatingPoll
+          form="form2"
+          questionId="long_gap_rating"
+          index={2}
+          initialStats={batchStats}
+          statsStatus={statsStatus}
+          title={`${FORM2_COPY.longGapTitle} *`}
+          titleBn={FORM2_COPY.longGapBn}
+          leftLabel={FORM2_COPY.longGapLeft}
+          rightLabel={FORM2_COPY.longGapRight}
+          value={longGap}
+          onChange={setLongGap}
+          visual={<VisualLongGapForm2 />}
+        />
+
+        <RatingPoll
+          form="form2"
+          questionId="fairness_rating"
+          index={3}
+          initialStats={batchStats}
+          statsStatus={statsStatus}
+          title={`${FORM2_COPY.fairnessTitle} *`}
+          titleBn={FORM2_COPY.fairnessBn}
+          leftLabel={FORM2_COPY.fairnessLeft}
+          rightLabel={FORM2_COPY.fairnessRight}
+          value={fairness}
+          onChange={setFairness}
+          visual={<VisualFairness />}
+        />
 
         {/* Question 4: Free-text feedback */}
         <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
@@ -377,18 +345,13 @@ export default function Form2Page() {
             <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-violet-100 text-xs font-black text-violet-700">
               4
             </span>
-            <h3 className="text-[17px] font-bold text-zinc-900">
-              Additional Feedback &amp; Constraints
-            </h3>
+            <h3 className="text-[17px] font-bold text-zinc-900">{FORM2_COPY.feedbackTitle}</h3>
           </div>
-          <p className="mt-1 text-sm text-zinc-600 leading-relaxed">
-            এআই রুটিন জেনারেটরের বিবেচনা করা উচিত — এমন আর কোনো পরামর্শ, বিশেষ কনস্ট্রেইন্ট বা সমস্যা কি
-            আপনার জানা আছে?
-          </p>
+          <p className="mt-1 text-sm text-zinc-600 leading-relaxed">{FORM2_COPY.feedbackBn}</p>
           <textarea
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
-            placeholder="আপনার মতামত বা পরামর্শ এখানে লিখুন (Optional)..."
+            placeholder={FORM2_COPY.feedbackPlaceholder}
             className="mt-4 h-28 w-full rounded-2xl border-2 border-zinc-200 p-4 text-sm outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
           />
         </section>
@@ -410,7 +373,7 @@ export default function Form2Page() {
             {loading ? "Submitting Ratings…" : `Submit Ratings (${answered}/${total})`}
           </button>
           <div className="flex items-center justify-center gap-2 text-xs text-zinc-400">
-            <span>🔒 100% Anonymous</span>
+            <span>🔒 Fully anonymous</span>
             <span>•</span>
             <span>One vote per browser</span>
             <span>•</span>

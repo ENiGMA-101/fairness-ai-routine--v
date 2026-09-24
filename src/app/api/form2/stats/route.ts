@@ -1,9 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { eq } from "drizzle-orm";
 import { db, ensureTablesExist, isDatabaseConfigured, markDatabaseBroken } from "@/db";
 import { form2Responses } from "@/db/schema";
 import { FORM2_ROW_KEYS } from "@/lib/results";
 import { getAllForm2 } from "@/lib/storage";
-import { FORM2_COLUMN_KEYS } from "@/lib/survey";
+import { FORM2_COLUMN_KEYS, SURVEY_VERSION } from "@/lib/survey";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,10 @@ export async function GET(req: NextRequest) {
   if (isDatabaseConfigured()) {
     try {
       await ensureTablesExist();
-      const rows = await db.select({ value: form2Responses[key] }).from(form2Responses);
+      const rows = await db
+        .select({ value: form2Responses[key] })
+        .from(form2Responses)
+        .where(eq(form2Responses.surveyVersion, SURVEY_VERSION));
       values = rows.map((r) =>
         r.value !== null && r.value !== undefined ? String(r.value) : null,
       );

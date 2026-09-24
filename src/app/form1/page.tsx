@@ -19,12 +19,12 @@ import { FORM1_VISUALS } from "@/components/Visuals";
 import { useSurveyPollStats } from "@/lib/poll-stats-client";
 import { getBrowserId, isSubmitted, markSubmitted } from "@/lib/browser";
 import {
-  DEPARTMENTS,
+  DEPARTMENT_OPTIONS,
   FORM1_QUESTIONS,
-  orderForSurvey,
+  ROLE_OPTIONS,
+  STUDENT_SECTION_INTRO,
+  TEACHER_SECTION_INTRO,
 } from "@/lib/survey";
-
-const ROLE_QUESTION = FORM1_QUESTIONS.find((q) => q.id === "role")!;
 const QUESTIONS = FORM1_QUESTIONS.filter((q) => q.id !== "role" && q.id !== "department");
 
 export default function Form1Page() {
@@ -46,18 +46,13 @@ export default function Form1Page() {
     }
   }, []);
 
-  // Shuffle opinion questions on every entry; demographic questions (semester) stay fixed at top
-  const [orderedQuestions, setOrderedQuestions] = useState(() => [...QUESTIONS]);
-  useEffect(() => {
-    setOrderedQuestions(orderForSurvey(QUESTIONS));
-  }, []);
-
+  // Render the exact Google Forms order; no question shuffling.
   const visible = useMemo(
     () =>
-      orderedQuestions.filter((q) =>
-        role === "" ? false : q.audience === role || q.audience === "Both",
+      QUESTIONS.filter((question) =>
+        role === "" ? false : question.audience === role || question.audience === "Both",
       ),
-    [role, orderedQuestions],
+    [role],
   );
 
   const total = useMemo(() => (role ? visible.length + 2 : 2), [role, visible.length]);
@@ -253,103 +248,79 @@ export default function Form1Page() {
           </div>
         </div>
 
-        {/* 1. Role Selection (Graphical) */}
+        {/* Common profile questions — same wording and order as Google Forms */}
         <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
-          <div className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-violet-100 text-xs font-black text-violet-700">
-              1
-            </span>
-            <h3 className="text-[17px] font-bold text-zinc-900">
-              আপনি কি শিক্ষার্থী, নাকি শিক্ষক? *
-            </h3>
-          </div>
-          <p className="mt-1 text-sm font-medium text-zinc-500">
-            Are you a Student or Teacher?
-          </p>
-
+          <h3 className="text-[17px] font-bold text-zinc-900">Are you a Student or Teacher? *</h3>
           <div className="mt-5 grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => setRole("Student")}
-              className={`flex flex-col items-center justify-center rounded-2xl border-2 p-5 transition-all ${
-                role === "Student"
-                  ? "border-violet-600 bg-violet-50/70 shadow-md ring-2 ring-violet-500/20"
-                  : "border-zinc-200 bg-white hover:border-violet-300 hover:bg-zinc-50"
-              }`}
-            >
-              <span className={`flex h-12 w-12 items-center justify-center rounded-2xl mb-2 ${
-                role === "Student" ? "bg-violet-600 text-white" : "bg-violet-100 text-violet-600"
-              }`}>
-                <GraduationCap className="h-6 w-6" />
-              </span>
-              <span className="text-base font-bold text-zinc-900">Student</span>
-              <span className="text-xs text-zinc-500 font-medium">শিক্ষার্থী</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setRole("Teacher")}
-              className={`flex flex-col items-center justify-center rounded-2xl border-2 p-5 transition-all ${
-                role === "Teacher"
-                  ? "border-violet-600 bg-violet-50/70 shadow-md ring-2 ring-violet-500/20"
-                  : "border-zinc-200 bg-white hover:border-violet-300 hover:bg-zinc-50"
-              }`}
-            >
-              <span className={`flex h-12 w-12 items-center justify-center rounded-2xl mb-2 ${
-                role === "Teacher" ? "bg-violet-600 text-white" : "bg-indigo-100 text-indigo-600"
-              }`}>
-                <Briefcase className="h-6 w-6" />
-              </span>
-              <span className="text-base font-bold text-zinc-900">Teacher</span>
-              <span className="text-xs text-zinc-500 font-medium">শিক্ষক</span>
-            </button>
-          </div>
-        </section>
-
-        {/* 2. Department Selection */}
-        <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
-          <div className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-violet-100 text-xs font-black text-violet-700">
-              2
-            </span>
-            <h3 className="text-[17px] font-bold text-zinc-900">
-              আপনি কোন বিভাগের অন্তর্ভুক্ত? *
-            </h3>
-          </div>
-          <p className="mt-1 text-sm font-medium text-zinc-500">
-            Which department do you belong to?
-          </p>
-
-          <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-            {DEPARTMENTS.map((d) => {
-              const selected = department === d;
+            {ROLE_OPTIONS.map((option) => {
+              const selected = role === option.value;
               return (
                 <button
-                  key={d}
+                  key={option.value}
                   type="button"
-                  onClick={() => setDepartment(d)}
-                  className={`flex items-center gap-2 rounded-2xl border-2 px-4 py-3 text-left transition-all ${
-                    selected
-                      ? "border-violet-600 bg-violet-50/70 font-bold text-violet-950 shadow-sm"
-                      : "border-zinc-200 bg-white font-medium text-zinc-700 hover:border-violet-300 hover:bg-zinc-50"
-                  }`}
+                  onClick={() => setRole(option.value)}
+                  className={`flex flex-col items-center justify-center rounded-2xl border-2 p-5 transition-all ${selected
+                    ? "border-violet-600 bg-violet-50/70 shadow-md ring-2 ring-violet-500/20"
+                    : "border-zinc-200 bg-white hover:border-violet-300 hover:bg-zinc-50"}`}
                 >
-                  <Building2 className={`h-4 w-4 ${selected ? "text-violet-600" : "text-zinc-400"}`} />
-                  <span className="text-sm">{d}</span>
+                  <span className={`mb-2 flex h-12 w-12 items-center justify-center rounded-2xl ${selected ? "bg-violet-600 text-white" : "bg-violet-100 text-violet-600"}`}>
+                    {option.value === "Student" ? <GraduationCap className="h-6 w-6" /> : <Briefcase className="h-6 w-6" />}
+                  </span>
+                  <span className="text-base font-bold text-zinc-900">{option.label}</span>
                 </button>
               );
             })}
           </div>
+        </section>
 
+        <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
+          <h3 className="text-[17px] font-bold text-zinc-900">Which department do you belong to? *</h3>
+          <div className="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+            {DEPARTMENT_OPTIONS.map((option) => {
+              const selected = department === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setDepartment(option.value)}
+                  className={`flex items-center gap-2 rounded-2xl border-2 px-4 py-3 text-left transition-all ${selected
+                    ? "border-violet-600 bg-violet-50/70 font-bold text-violet-950 shadow-sm"
+                    : "border-zinc-200 bg-white font-medium text-zinc-700 hover:border-violet-300 hover:bg-zinc-50"}`}
+                >
+                  <Building2 className={`h-4 w-4 ${selected ? "text-violet-600" : "text-zinc-400"}`} />
+                  <span className="text-sm">{option.label}</span>
+                </button>
+              );
+            })}
+          </div>
           {department === "Other" && (
             <input
               value={departmentOther}
-              onChange={(e) => setDepartmentOther(e.target.value)}
-              placeholder="আপনার বিভাগের নাম লিখুন (Enter Department name)"
+              onChange={(event) => setDepartmentOther(event.target.value)}
+              placeholder="Other"
               className="mt-3.5 w-full rounded-2xl border-2 border-zinc-200 px-4 py-3 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
             />
           )}
         </section>
+
+        {role && (
+          <section className="mb-6 rounded-[28px] border border-violet-200 bg-gradient-to-br from-violet-50 to-sky-50 p-6 shadow-sm dark:border-violet-500/30 dark:from-violet-500/10 dark:to-sky-500/10">
+            {(() => {
+              const section = role === "Student" ? STUDENT_SECTION_INTRO : TEACHER_SECTION_INTRO;
+              return (
+                <>
+                  <h2 className="text-lg font-black text-slate-900 dark:text-white">{section.title}</h2>
+                  <div className="mt-3 space-y-1 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                    {section.english.map((line) => <p key={line}>{line}</p>)}
+                  </div>
+                  <div className="mt-4 space-y-1 border-t border-violet-200 pt-4 text-sm leading-relaxed text-slate-700 dark:border-violet-500/30 dark:text-slate-200">
+                    {section.bangla.map((line) => <p key={line}>{line}</p>)}
+                  </div>
+                </>
+              );
+            })()}
+          </section>
+        )}
 
         {/* Dynamic Questions Based on Role */}
         {role === "" ? (
@@ -372,7 +343,7 @@ export default function Form1Page() {
                 key={q.id}
                 form="form1"
                 questionId={q.id}
-                index={i + 3}
+                index={i + 1}
                 title={q.titleBn}
                 subtitle={q.titleEn}
                 options={q.options}
@@ -403,7 +374,7 @@ export default function Form1Page() {
             {loading ? "Submitting Response…" : `Submit Response (${answered}/${total})`}
           </button>
           <div className="flex items-center justify-center gap-2 text-xs text-zinc-400">
-            <span>🔒 100% Anonymous</span>
+            <span>🔒 Fully anonymous</span>
             <span>•</span>
             <span>One vote per browser</span>
             <span>•</span>

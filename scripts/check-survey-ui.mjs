@@ -55,8 +55,15 @@ try {
   const semester = page.locator("#question-semester");
   await semester.waitFor({ state: "visible" });
   assert.equal(await semester.locator("[data-poll-result]").count(), 0, "No results before clicking semester");
-  assert.equal(await page.locator(".survey-card[id]").first().getAttribute("id"), "question-semester", "Semester remains fixed before shuffled opinions");
-  console.log("PASS semester: fixed at top and percentages hidden before click");
+  assert.equal(await page.locator(".survey-card[id]").first().getAttribute("id"), "question-semester", "Semester remains first");
+  const studentOrder = await page.locator(".survey-card[id]").evaluateAll((cards) => cards.map((card) => card.id));
+  assert.deepEqual(studentOrder, [
+    "question-semester", "question-q_avoid", "question-q_weekly_off", "question-q_between_classes",
+    "question-q_extra_time", "question-q_long_gap", "question-q_midday_break", "question-q_max_hours",
+    "question-q_lab_cap", "question-q_priority_group", "question-q_conflict_student",
+  ], "Form 1 student order matches Google Forms");
+  assert.equal(await page.locator(".survey-card[id] .survey-visual").count(), 10, "Every applicable student question has its diagram");
+  console.log("PASS Form 1: exact student order, semester first, percentages hidden before click, diagrams present");
 
   const requestsBefore = statsRequests;
   await semester.getByRole("button").nth(0).click();
@@ -89,6 +96,21 @@ try {
   await page.waitForURL(baseURL + "/");
   assert(await page.getByRole("link", { name: "Open Form 1 — Student and Teacher Survey", exact: true }).isVisible());
   console.log("PASS Home button returns to the survey-first landing page");
+
+  await page.goto(`${baseURL}/form2`, { waitUntil: "load" });
+  assert(await page.getByText("1. Time-Slot Preference Rating *", { exact: true }).isVisible());
+  for (const label of ["8:00–9:20", "9:30–10:50", "11:00–12:20", "12:30–13:50", "14:00–15:20", "15:30–16:50", "17:00–18:20"]) {
+    assert(await page.getByText(label, { exact: true }).isVisible(), `Form 2 slot visible: ${label}`);
+  }
+  const longGapTitle = page.getByText("2. Long Campus Gaps Between Classes (Idle Wait Time) *", { exact: true });
+  const fairnessTitle = page.getByText("3. Multi-Semester Fairness (Algorithmic Memory) *", { exact: true });
+  const feedbackTitle = page.getByText("4. Additional Feedback & Constraints", { exact: true });
+  assert(await longGapTitle.isVisible() && await fairnessTitle.isVisible() && await feedbackTitle.isVisible(), "Form 2 questions visible");
+  const y = async (locator) => (await locator.boundingBox()).y;
+  assert(await y(longGapTitle) < await y(fairnessTitle) && await y(fairnessTitle) < await y(feedbackTitle), "Form 2 Google Forms order is fixed");
+  assert.equal(await page.getByPlaceholder("Short answer text").count(), 1, "Form 2 feedback placeholder matches");
+  console.log("PASS Form 2: exact slot labels, 1–5 structure, question order and feedback copy");
+
   assert.deepEqual(errors, [], "No browser runtime errors");
   console.log(`All checks passed. Screenshots: ${screenshotDir}`);
 } finally {

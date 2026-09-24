@@ -1,8 +1,17 @@
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db, ensureTablesExist, isDatabaseConfigured, markDatabaseBroken } from "@/db";
 import { form1Responses, form2Responses, type Form1Row, type Form2Row } from "@/db/schema";
 import { getAllForm1, getAllForm2, type Form1Record, type Form2Record } from "./storage";
-import { FORM1_QUESTIONS, TIME_SLOTS, labelFor } from "./survey";
+import {
+  DEPARTMENTS,
+  FORM1_QUESTIONS,
+  FORM2_COPY,
+  ROLE_OPTIONS,
+  SURVEY_VERSION,
+  TIME_SLOTS,
+  labelFor,
+  questionById,
+} from "./survey";
 
 export type DistRow = { value: string; label: string; count: number; percent: number };
 export type Distribution = {
@@ -58,7 +67,11 @@ const FORM2_ROW_KEYS: Record<string, keyof Form2Row> = {
   fairness_rating: "fairnessRating",
 };
 
-function tally(values: (string | number | null)[], questionId?: string): DistRow[] {
+function tally(
+  values: (string | number | null)[],
+  questionId?: string,
+  explicitOrder?: readonly string[],
+): DistRow[] {
   const counts = new Map<string, number>();
   let total = 0;
   for (const raw of values) {
@@ -67,13 +80,18 @@ function tally(values: (string | number | null)[], questionId?: string): DistRow
     counts.set(key, (counts.get(key) ?? 0) + 1);
     total += 1;
   }
-  const order = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
-  return order.map(([value, count]) => ({
-    value,
-    label: questionId ? labelFor(questionId, value) : value,
-    count,
-    percent: total ? Math.round((count / total) * 100) : 0,
-  }));
+
+  const canonical = explicitOrder ?? questionById(questionId ?? "")?.options.map((option) => option.value);
+  const order = canonical ? [...canonical] : [...counts.keys()];
+  return order.map((value) => {
+    const count = counts.get(value) ?? 0;
+    return {
+      value,
+      label: questionId ? labelFor(questionId, value) : value,
+      count,
+      percent: total ? Math.round((count / total) * 100) : 0,
+    };
+  });
 }
 
 function averageOf(values: number[]): number {
@@ -97,7 +115,11 @@ export async function getForm1Results(): Promise<Form1Results> {
   if (isDatabaseConfigured()) {
     try {
       await ensureTablesExist();
-      rows = await db.select().from(form1Responses).orderBy(desc(form1Responses.createdAt));
+      rows = await db
+        .select()
+        .from(form1Responses)
+        .where(eq(form1Responses.surveyVersion, SURVEY_VERSION))
+        .orderBy(desc(form1Responses.createdAt));
     } catch (err) {
       console.warn("Postgres fetch failed, falling back to local store:", err);
       markDatabaseBroken(err instanceof Error ? err.message : String(err));
@@ -162,7 +184,7 @@ export async function getForm2Results(): Promise<Form2Results> {
     range,
     average: averageOf(values),
     total: values.length,
-    distribution: tally(values),
+    distribution: tally(values, undefined, ["1", "2", "3", "4", "5"]),
   });
 
   let rows: (Form2Row | Form2Record)[] = [];
@@ -171,7 +193,11 @@ export async function getForm2Results(): Promise<Form2Results> {
   if (isDatabaseConfigured()) {
     try {
       await ensureTablesExist();
-      rows = await db.select().from(form2Responses).orderBy(desc(form2Responses.createdAt));
+      rows = await db
+        .select()
+        .from(form2Responses)
+        .where(eq(form2Responses.surveyVersion, SURVEY_VERSION))
+        .orderBy(desc(form2Responses.createdAt));
     } catch (err) {
       console.warn("Postgres fetch failed, falling back to local store:", err);
       markDatabaseBroken(err instanceof Error ? err.message : String(err));
@@ -208,13 +234,13 @@ export async function getForm2Results(): Promise<Form2Results> {
     slots,
     longGap: ratingSummary(
       "long_gap_rating",
-      "Long campus gaps between classes (idle wait time)",
+      FORM2_COPY.longGapTitle,
       undefined,
       longGapValues,
     ),
     fairness: ratingSummary(
       "fairness_rating",
-      "Multi-semester fairness (algorithmic memory)",
+      FORM2_COPY.fairnessTitle,
       undefined,
       fairnessValues,
     ),
@@ -222,13 +248,13 @@ export async function getForm2Results(): Promise<Form2Results> {
       id: "role",
       title: "Role",
       total: rows.length,
-      rows: tally(rows.map((r) => r.role)),
+      rows: tally(rows.map((r) => r.role), undefined, ROLE_OPTIONS.map((option) => option.value)),
     },
     departmentSplit: {
       id: "department",
       title: "Department",
       total: rows.length,
-      rows: tally(rows.map((r) => r.department)),
+      rows: tally(rows.map((r) => r.department), undefined, DEPARTMENTS),
     },
     feedback: rows
       .filter((r) => r.feedback && r.feedback.trim().length > 0)

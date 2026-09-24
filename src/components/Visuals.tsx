@@ -31,16 +31,16 @@ export function VisualAvoid() {
             <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-red-100 text-red-600">
               <Sun className="h-4 w-4 text-amber-600" />
             </span>
-            Option A: Avoid Early Morning
+            Option A: Avoid early classes
           </div>
           <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">
-            8–11 AM OFF
+            8:00–9:20 AM
           </span>
         </div>
         <div className="mt-3 space-y-2">
           <div className="flex items-center justify-between rounded-xl border border-red-200 bg-white/80 p-2.5 text-zinc-700">
             <span className="flex items-center gap-2">
-              <Clock className="h-3.5 w-3.5 text-zinc-400" /> 08:00 – 10:50 AM
+              <Clock className="h-3.5 w-3.5 text-zinc-400" /> 08:00 – 09:20 AM
             </span>
             <span className="flex items-center gap-1 rounded-md bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
               <X className="h-3 w-3" /> Avoid
@@ -69,7 +69,7 @@ export function VisualAvoid() {
             Option B: Avoid Late Evening
           </div>
           <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">
-            3:30–6:20 PM OFF
+            5:00–6:20 PM
           </span>
         </div>
         <div className="mt-3 space-y-2">
@@ -83,7 +83,7 @@ export function VisualAvoid() {
           </div>
           <div className="flex items-center justify-between rounded-xl border border-blue-200 bg-white/80 p-2.5 text-zinc-700">
             <span className="flex items-center gap-2">
-              <Clock className="h-3.5 w-3.5 text-zinc-400" /> 03:30 – 06:20 PM
+              <Clock className="h-3.5 w-3.5 text-zinc-400" /> 05:00 – 06:20 PM
             </span>
             <span className="flex items-center gap-1 rounded-md bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
               <X className="h-3 w-3" /> Avoid
@@ -103,7 +103,7 @@ export function VisualPacked() {
     <div className="grid gap-3 sm:grid-cols-2 text-xs">
       <div className="rounded-2xl border-2 border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 p-4">
         <div className="flex items-center justify-between">
-          <span className="font-bold text-emerald-900">4 Intense Days + 1 Day OFF</span>
+          <span className="font-bold text-emerald-900">4 Packed Days (Sun–Wed)</span>
           <span className="rounded-full bg-emerald-600 px-2.5 py-0.5 text-[10px] font-black text-white shadow">
             🎉 FULL DAY OFF
           </span>
@@ -294,18 +294,18 @@ export function VisualMaxHours() {
     <div className="grid gap-3 sm:grid-cols-2 text-xs">
       <div className="rounded-2xl border-2 border-violet-200 bg-gradient-to-br from-violet-50 to-indigo-50 p-4">
         <div className="flex items-center gap-2 font-bold text-violet-900">
-          <BatteryCharging className="h-4 w-4 text-violet-600" /> Max 3 Hours / Day
+          <BatteryCharging className="h-4 w-4 text-violet-600" /> Max 4 Hours / Day
         </div>
         <div className="mt-2 text-zinc-600">
-          High concentration, lower daily fatigue, but spread across more days.
+          Cap the day at four class hours to reduce fatigue.
         </div>
       </div>
       <div className="rounded-2xl border-2 border-slate-200 bg-gradient-to-br from-slate-50 to-zinc-100 p-4">
         <div className="flex items-center gap-2 font-bold text-zinc-800">
-          <Flame className="h-4 w-4 text-orange-600" /> 4+ Hours / Day (Packed)
+          <Flame className="h-4 w-4 text-orange-600" /> Up to 6 Hours / Day
         </div>
         <div className="mt-2 text-zinc-600">
-          High endurance sprint days in exchange for more free weekdays.
+          Accept a longer class day in exchange for more free time elsewhere.
         </div>
       </div>
     </div>
@@ -434,12 +434,12 @@ export function VisualConsecutive() {
   return (
     <div className="grid gap-3 sm:grid-cols-2 text-xs">
       <div className="rounded-2xl border-2 border-indigo-200 bg-indigo-50 p-4">
-        <div className="font-bold text-indigo-900">Continuous 3 Classes</div>
-        <div className="mt-1 text-zinc-600">Finish all teaching in one continuous stretch.</div>
+        <div className="font-bold text-indigo-900">Two Consecutive 1h 20m Classes</div>
+        <div className="mt-1 text-zinc-600">Take both classes back-to-back without a gap.</div>
       </div>
       <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50 p-4">
-        <div className="font-bold text-emerald-900">With Breathers</div>
-        <div className="mt-1 text-zinc-600">Rest, drink water, and review notes between classes.</div>
+        <div className="font-bold text-emerald-900">Break Between the Two Classes</div>
+        <div className="mt-1 text-zinc-600">Keep a short rest period between the classes.</div>
       </div>
     </div>
   );
@@ -472,8 +472,8 @@ export function VisualFacultyConflict() {
         </div>
       </div>
       <div className="rounded-2xl border-2 border-amber-200 bg-amber-50 p-4">
-        <div className="font-bold text-amber-900">First-Come, First-Served</div>
-        <div className="mt-1 text-zinc-600">Early slot requests receive priority approval.</div>
+        <div className="font-bold text-amber-900">Semester Rotation</div>
+        <div className="mt-1 text-zinc-600">One teacher receives the slot now; the other gets priority next semester.</div>
       </div>
     </div>
   );
