@@ -8,99 +8,165 @@ export type PollStats = {
   percentages: Record<string, number>;
 };
 
-export type PollStatsMap = Record<string, PollStats>;
-export type SurveyForm = "form1" | "form2";
+export type PollStatsMap = Record<
+  string,
+  PollStats
+>;
 
-type Snapshot = { data: PollStatsMap; fetchedAt: number };
+export type SurveyForm =
+  | "form1"
+  | "form2";
 
-const SESSION_MAX_AGE = 5 * 60_000;
-const FRESH_FOR = 25_000;
-const snapshots: Partial<Record<SurveyForm, Snapshot>> = {};
-const pending: Partial<Record<SurveyForm, Promise<PollStatsMap>>> = {};
+type Snapshot = {
+  data: PollStatsMap;
+  fetchedAt: number;
+};
 
-function sessionKey(form: SurveyForm) {
-  return `fairness-poll-stats:${form}`;
+const snapshots: Partial<
+  Record<SurveyForm, Snapshot>
+> = {};
+
+const pending: Partial<
+  Record<
+    SurveyForm,
+    Promise<PollStatsMap>
+  >
+> = {};
+
+/*
+ * Fetch the current database state.
+ *
+ * IMPORTANT:
+ * No sessionStorage.
+ * No 5-minute browser cache.
+ */
+export function getPollStatsSnapshot(
+  form: SurveyForm,
+): PollStatsMap | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return snapshots[form]?.data ?? null;
 }
 
-/** Only anonymous, aggregate counts are stored; no respondent answers or IDs. */
-export function getPollStatsSnapshot(form: SurveyForm): PollStatsMap | null {
-  if (typeof window === "undefined") return null;
-  let snapshot = snapshots[form];
-  if (!snapshot) {
-    try {
-      const stored = window.sessionStorage.getItem(sessionKey(form));
-      if (stored) {
-        const parsed = JSON.parse(stored) as Snapshot;
-        if (parsed?.data && typeof parsed.fetchedAt === "number") {
-          snapshot = parsed;
-          snapshots[form] = parsed;
-        }
-      }
-    } catch {
-      // Storage can be disabled; the form still fetches from the API.
-    }
+export function preloadPollStats(
+  form: SurveyForm,
+  refresh = false,
+): Promise<PollStatsMap> {
+  if (!refresh && pending[form]) {
+    return pending[form]!;
   }
-  return snapshot && Date.now() - snapshot.fetchedAt < SESSION_MAX_AGE ? snapshot.data : null;
-}
 
-/** Deduplicated one-request preload for the entire survey, not one request per option. */
-export function preloadPollStats(form: SurveyForm, refresh = false): Promise<PollStatsMap> {
-  const snapshot = getPollStatsSnapshot(form);
-  if (!refresh && snapshot && snapshots[form] && Date.now() - snapshots[form]!.fetchedAt < FRESH_FOR) {
-    return Promise.resolve(snapshot);
-  }
-  if (pending[form]) return pending[form];
-
-  const request = fetch(`/api/${form}/stats/all`, { cache: "no-store" })
+  const request = fetch(
+    `/api/${form}/stats/all?ts=${Date.now()}`,
+    {
+      method: "GET",
+      cache: "no-store",
+      headers: {
+        "Cache-Control":
+          "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+      },
+    },
+  )
     .then(async (response) => {
-      if (!response.ok) throw new Error("Poll statistics are unavailable");
-      const data: unknown = await response.json();
-      if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Invalid poll statistics");
-      const map = data as PollStatsMap;
-      const next: Snapshot = { data: map, fetchedAt: Date.now() };
-      snapshots[form] = next;
-      try { window.sessionStorage.setItem(sessionKey(form), JSON.stringify(next)); } catch { /* private mode */ }
+      if (!response.ok) {
+        throw new Error(
+          "Poll statistics are unavailable",
+        );
+      }
+
+      const data: unknown =
+        await response.json();
+
+      if (
+        !data ||
+        typeof data !== "object" ||
+        Array.isArray(data)
+      ) {
+        throw new Error(
+          "Invalid poll statistics",
+        );
+      }
+
+      const map =
+        data as PollStatsMap;
+
+      snapshots[form] = {
+        data: map,
+        fetchedAt: Date.now(),
+      };
+
       return map;
     })
-    .finally(() => { delete pending[form]; });
+    .finally(() => {
+      delete pending[form];
+    });
 
   pending[form] = request;
+
   return request;
 }
 
-/** Preload on page entry; selection itself never waits for the network. */
-export function useSurveyPollStats(form: SurveyForm) {
-  const [stats, setStats] = useState<PollStatsMap>({});
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+export function useSurveyPollStats(
+  form: SurveyForm,
+) {
+  const [stats, setStats] =
+    useState<PollStatsMap>({});
+
+  const [status, setStatus] =
+    useState<
+      "loading" | "ready" | "error"
+    >("loading");
 
   useEffect(() => {
     let active = true;
-    const cached = getPollStatsSnapshot(form);
-    if (cached) {
-      queueMicrotask(() => {
-        if (!active) return;
-        setStats(cached);
-        setStatus("ready");
-      });
-    }
 
-    const update = (refresh = false) => {
-      void preloadPollStats(form, refresh)
+    const update = () => {
+      void preloadPollStats(
+        form,
+        true,
+      )
         .then((latest) => {
           if (!active) return;
+
           setStats(latest);
           setStatus("ready");
         })
         .catch(() => {
-          if (active && !getPollStatsSnapshot(form)) setStatus("error");
+          if (!active) return;
+
+          setStatus("error");
         });
     };
+
+    /*
+     * Fetch immediately.
+     */
     update();
-    const timer = window.setInterval(() => {
-      if (!document.hidden) update(true);
-    }, 45_000);
-    return () => { active = false; window.clearInterval(timer); };
+
+    /*
+     * Refresh every 5 seconds.
+     *
+     * This means another person's submission will
+     * normally appear within a few seconds.
+     */
+    const timer =
+      window.setInterval(() => {
+        if (!document.hidden) {
+          update();
+        }
+      }, 5000);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
   }, [form]);
 
-  return { stats, status };
+  return {
+    stats,
+    status,
+  };
 }
