@@ -24,6 +24,7 @@ import {
   ROLE_OPTIONS,
   STUDENT_SECTION_INTRO,
   TEACHER_SECTION_INTRO,
+  shuffleSurveyQuestions,
 } from "@/lib/survey";
 const QUESTIONS = FORM1_QUESTIONS.filter((q) => q.id !== "role" && q.id !== "department");
 
@@ -46,13 +47,19 @@ export default function Form1Page() {
     }
   }, []);
 
-  // Render the exact Google Forms order; no question shuffling.
+  // Shuffle only the display order on each client visit. Semester stays first;
+  // Student and Teacher questions never enter each other's section.
+  const [displayQuestions, setDisplayQuestions] = useState(() => [...QUESTIONS]);
+  useEffect(() => {
+    setDisplayQuestions(shuffleSurveyQuestions(QUESTIONS));
+  }, []);
+
   const visible = useMemo(
     () =>
-      QUESTIONS.filter((question) =>
+      displayQuestions.filter((question) =>
         role === "" ? false : question.audience === role || question.audience === "Both",
       ),
-    [role],
+    [role, displayQuestions],
   );
 
   const total = useMemo(() => (role ? visible.length + 2 : 2), [role, visible.length]);

@@ -265,6 +265,30 @@ export const FORM1_ALLOWED_VALUES: Record<string, readonly string[]> = Object.fr
   FORM1_QUESTIONS.map((question) => [question.id, question.options.map((option) => option.value)]),
 );
 
+/**
+ * Display-only shuffle. Original question definitions, IDs and results order do
+ * not change. Role/department/semester keep their original serial positions;
+ * student and teacher questions each shuffle within their own audience.
+ */
+export function shuffleSurveyQuestions(
+  questions: readonly QuestionDef[],
+  random: () => number = Math.random,
+): QuestionDef[] {
+  const pinned = questions.filter(({ id }) => id === "role" || id === "department" || id === "semester");
+  const student = questions.filter(({ audience, id }) => audience === "Student" && id !== "semester");
+  const teacher = questions.filter(({ audience }) => audience === "Teacher");
+  const shared = questions.filter(({ audience, id }) => audience === "Both" && id !== "role" && id !== "department");
+  const shuffle = (items: QuestionDef[]) => {
+    const copy = [...items];
+    for (let i = copy.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+  };
+  return [...pinned, ...shuffle(student), ...shuffle(teacher), ...shuffle(shared)];
+}
+
 export type SlotDef = { id: string; label: string; range: string };
 
 export const TIME_SLOTS: SlotDef[] = [

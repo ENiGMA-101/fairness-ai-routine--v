@@ -3,10 +3,8 @@ import HomeButton from "@/components/HomeButton";
 import RefreshButton from "@/components/RefreshButton";
 import { DistributionCard, StatTile } from "@/components/ResultCards";
 import { getForm1Results, type Form1Results } from "@/lib/results";
-// import { cachedValue } from "@/lib/stats-cache";
 
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
 export default async function Form1ResultsPage() {
   let data: Form1Results | null = null;

@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { Sparkles } from "lucide-react";
 import type { PollStats, PollStatsMap } from "@/lib/poll-stats-client";
+import { sortOptionsByLivePercentage } from "@/lib/poll-analytics";
 
 type Props = {
   form: "form1" | "form2";
@@ -42,6 +43,10 @@ export default function RatingPoll({
 }: Props) {
   const [clicked, setClicked] = useState(false);
   const stats: PollStats | null = initialStats?.[questionId] ?? null;
+  const orderedScale = sortOptionsByLivePercentage(
+    SCALE.map((item) => ({ ...item, value: String(item.n) })),
+    stats,
+  );
   const showAllResults = clicked && stats !== null;
 
   function select(rating: number) {
@@ -61,7 +66,7 @@ export default function RatingPoll({
       </div>
 
       <div className="mt-5 grid grid-cols-5 gap-1.5 sm:gap-2" role="group" aria-label={title}>
-        {SCALE.map(({ n, emoji, label }) => {
+        {orderedScale.map(({ n, emoji, label }) => {
           const selected = value === n;
           const percent = stats?.percentages?.[String(n)] ?? 0;
           const count = stats?.counts?.[String(n)] ?? 0;
@@ -86,8 +91,8 @@ export default function RatingPoll({
         })}
       </div>
       <div className="mt-3 flex justify-between gap-4 text-[11px] font-medium text-slate-500 dark:text-slate-400 sm:text-xs">
-        <span className="max-w-[48%]">{leftLabel}</span>
-        <span className="max-w-[48%] text-right">{rightLabel}</span>
+        <span className="max-w-[48%]">1: {leftLabel}</span>
+        <span className="max-w-[48%] text-right">5: {rightLabel}</span>
       </div>
 
       {showAllResults ? (
@@ -97,7 +102,7 @@ export default function RatingPoll({
             <span>{stats.total} submitted response{stats.total === 1 ? "" : "s"}</span>
           </div>
           <div className="mt-3 space-y-2.5">
-            {SCALE.map(({ n }) => {
+            {orderedScale.map(({ n }) => {
               const percent = stats.percentages?.[String(n)] ?? 0;
               const count = stats.counts?.[String(n)] ?? 0;
               return (

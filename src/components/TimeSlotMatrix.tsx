@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Sunrise, Sun, Moon, Sparkles } from "lucide-react";
 import { FORM2_COPY, TIME_SLOTS } from "@/lib/survey";
 import type { PollStatsMap } from "@/lib/poll-stats-client";
+import { sortOptionsByLivePercentage } from "@/lib/poll-analytics";
 
 type Props = {
   values: Record<string, number>;
@@ -57,6 +58,10 @@ export default function TimeSlotMatrix({ values, onChange, initialStats, statsSt
         {TIME_SLOTS.map((slot) => {
           const chosen = values[slot.id];
           const stats = initialStats?.[slot.id] ?? null;
+          const orderedScale = sortOptionsByLivePercentage(
+            SCALE.map((item) => ({ ...item, value: String(item.n) })),
+            stats,
+          );
           const showAll = !!clickedSlots[slot.id] && stats !== null;
           return (
             <div key={slot.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 sm:p-4 dark:border-slate-600 dark:bg-[#1e2c47]">
@@ -69,7 +74,7 @@ export default function TimeSlotMatrix({ values, onChange, initialStats, statsSt
                 {showAll && <span className="rounded-full bg-sky-100 px-2.5 py-1 text-[10px] font-semibold text-sky-800 dark:bg-sky-500/20 dark:text-sky-200">{stats.total} responses</span>}
               </div>
               <div className="mt-3 grid grid-cols-5 gap-1.5" role="group" aria-label={`Rate ${slot.label}`}>
-                {SCALE.map(({ n, emoji, label }) => {
+                {orderedScale.map(({ n, emoji, label }) => {
                   const selected = chosen === n;
                   const percent = stats?.percentages?.[String(n)] ?? 0;
                   const count = stats?.counts?.[String(n)] ?? 0;

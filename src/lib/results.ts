@@ -2,6 +2,7 @@ import { desc, eq } from "drizzle-orm";
 import { db, ensureTablesExist, isDatabaseConfigured, markDatabaseBroken } from "@/db";
 import { form1Responses, form2Responses, type Form1Row, type Form2Row } from "@/db/schema";
 import { getAllForm1, getAllForm2, type Form1Record, type Form2Record } from "./storage";
+import { countValidVotes } from "./poll-analytics";
 import {
   DEPARTMENTS,
   FORM1_QUESTIONS,
@@ -72,26 +73,14 @@ function tally(
   questionId?: string,
   explicitOrder?: readonly string[],
 ): DistRow[] {
-  const counts = new Map<string, number>();
-  let total = 0;
-  for (const raw of values) {
-    if (raw === null || raw === undefined || raw === "") continue;
-    const key = String(raw);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-    total += 1;
-  }
-
-  const canonical = explicitOrder ?? questionById(questionId ?? "")?.options.map((option) => option.value);
-  const order = canonical ? [...canonical] : [...counts.keys()];
-  return order.map((value) => {
-    const count = counts.get(value) ?? 0;
-    return {
-      value,
-      label: questionId ? labelFor(questionId, value) : value,
-      count,
-      percent: total ? Math.round((count / total) * 100) : 0,
-    };
-  });
+  const canonical = explicitOrder ?? questionById(questionId ?? "")?.options.map((option) => option.value) ?? [];
+  const { counts, percentages } = countValidVotes(values, canonical);
+  return canonical.map((value) => ({
+    value,
+    label: questionId ? labelFor(questionId, value) : value,
+    count: counts[value],
+    percent: percentages[value],
+  }));
 }
 
 function averageOf(values: number[]): number {
@@ -121,12 +110,11 @@ export async function getForm1Results(): Promise<Form1Results> {
         .where(eq(form1Responses.surveyVersion, SURVEY_VERSION))
         .orderBy(desc(form1Responses.createdAt));
     } catch (err) {
-      console.warn("Postgres fetch failed, falling back to local store:", err);
       markDatabaseBroken(err instanceof Error ? err.message : String(err));
-      rows = getAllForm1();
-      isFallback = true;
+      throw new Error("Survey results are temporarily unavailable");
     }
   } else {
+    // Preview-only fallback when no persistent database is configured.
     rows = getAllForm1();
     isFallback = true;
   }
@@ -178,14 +166,17 @@ export async function getForm2Results(): Promise<Form2Results> {
     label: string,
     range: string | undefined,
     values: number[],
-  ): RatingSummary => ({
-    id,
-    label,
-    range,
-    average: averageOf(values),
-    total: values.length,
-    distribution: tally(values, undefined, ["1", "2", "3", "4", "5"]),
-  });
+  ): RatingSummary => {
+    const valid = values.filter((value) => Number.isInteger(value) && value >= 1 && value <= 5);
+    return {
+      id,
+      label,
+      range,
+      average: averageOf(valid),
+      total: valid.length,
+      distribution: tally(valid, undefined, ["1", "2", "3", "4", "5"]),
+    };
+  };
 
   let rows: (Form2Row | Form2Record)[] = [];
   let isFallback = false;
@@ -199,10 +190,8 @@ export async function getForm2Results(): Promise<Form2Results> {
         .where(eq(form2Responses.surveyVersion, SURVEY_VERSION))
         .orderBy(desc(form2Responses.createdAt));
     } catch (err) {
-      console.warn("Postgres fetch failed, falling back to local store:", err);
       markDatabaseBroken(err instanceof Error ? err.message : String(err));
-      rows = getAllForm2();
-      isFallback = true;
+      throw new Error("Survey results are temporarily unavailable");
     }
   } else {
     rows = getAllForm2();

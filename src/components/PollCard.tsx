@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { Check, Sparkles } from "lucide-react";
 import type { Option } from "@/lib/survey";
 import type { PollStats } from "@/lib/poll-stats-client";
+import { sortOptionsByLivePercentage } from "@/lib/poll-analytics";
 
 type PollCardProps = {
   form: "form1" | "form2";
@@ -36,6 +37,7 @@ export default function PollCard({
   const [clickedQuestion, setClickedQuestion] = useState<string | null>(null);
   const clicked = clickedQuestion === questionId;
   const stats = initialStats ?? null;
+  const orderedOptions = sortOptionsByLivePercentage(options, stats);
   const showAllResults = clicked && stats !== null;
   const waiting = clicked && stats === null;
 
@@ -62,7 +64,7 @@ export default function PollCard({
       </div>
 
       <div className="mt-5 space-y-2.5" role="group" aria-label={subtitle ?? title}>
-        {options.map((option) => {
+        {orderedOptions.map((option) => {
           const selected = value === option.value;
           const percent = stats?.percentages?.[option.value] ?? 0;
           const count = stats?.counts?.[option.value] ?? 0;

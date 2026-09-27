@@ -1,7 +1,8 @@
 {
-  "/api/form1/stats/route": "app/api/form1/stats/route.js",
+  "/api/counters/route": "app/api/counters/route.js",
+  "/api/form1/stats/all/route": "app/api/form1/stats/all/route.js",
   "/api/form1/submit/route": "app/api/form1/submit/route.js",
-  "/api/form2/stats/route": "app/api/form2/stats/route.js",
+  "/api/form2/stats/all/route": "app/api/form2/stats/all/route.js",
   "/api/form2/submit/route": "app/api/form2/submit/route.js",
   "/form1/page": "app/form1/page.js",
   "/form2/page": "app/form2/page.js",

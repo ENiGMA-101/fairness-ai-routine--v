@@ -5,9 +5,9 @@ A bilingual university research survey built with Next.js App Router, Tailwind a
 ## Public experience
 
 - **`/`**: research topic, immediate access to both surveys, live response counters and aggregate insights.
-- **`/form1`**: preference survey. Role, department and semester remain fixed; opinion questions shuffle on entry. After choosing an option, **every option in that question** reveals its percentage and number of submitted votes—including all eight semester choices. Fixed order does not suppress results. Changing an answer does not cast a vote; only Submit records it.
-- **`/form2`**: seven time-slot ratings, gap/fairness ratings and optional feedback. Rating a slot or a question reveals **all five ratings** and their submitted vote counts.
-- **`/results/form1`** and **`/results/form2`**: aggregate results in the original question order (never shuffled).
+- **`/form1`**: original bilingual questions and diagrams, with role, department and semester fixed; the remaining Student/Teacher questions shuffle independently on each visit. Survey option buttons sort by their live percentage. Clicking one reveals all options' current counts and percentages; changing an answer never casts a vote.
+- **`/form2`**: the same seven time-slot rows and 1–5 ratings with live, sorted answer choices; each selected slot/question reveals all its valid submitted results.
+- **`/results/form1`** and **`/results/form2`**: live aggregate results remain in original question and option order. Highest-count options are highlighted correctly; ties are labeled rather than claiming a unique leader.
 - A site-wide light/dark theme switch remembers your choice in the browser.
 
 ## Production deployment
@@ -31,8 +31,10 @@ npm run dev
 
 ## Data model
 
-- `form1_responses`: anonymous role, department, semester, and student/teacher preference answers.
+- `form1_responses`: anonymous role, department, semester, and the exact role-specific preference answers.
 - `form2_responses`: seven 1–5 time-slot ratings, gap/fairness ratings, and optional feedback.
-- `browser_id` has a database unique constraint per form. The browser also remembers submission state via localStorage.
+- `survey_version = 2` isolates the revised Google Forms survey from legacy responses.
+- `(browser_id, survey_version)` is unique per form. Browser submission markers are versioned too.
+- API validation is generated from the canonical options in `src/lib/survey.ts`; v2 database checks enforce answer domains and student/teacher completeness.
 
-Question text and display order are defined in `src/lib/survey.ts`; survey illustrations are in `src/components/Visuals.tsx`. Results are aggregated in `src/lib/results.ts`.
+Question text, option order, scale labels, and section copy are defined in `src/lib/survey.ts`; matching diagrams are in `src/components/Visuals.tsx`. Results are filtered to v2 and preserve canonical option order in `src/lib/results.ts`.

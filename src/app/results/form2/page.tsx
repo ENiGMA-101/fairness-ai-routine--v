@@ -1,12 +1,10 @@
 import Link from "next/link";
 import HomeButton from "@/components/HomeButton";
 import RefreshButton from "@/components/RefreshButton";
-import { BarRow, RatingCard, StatTile } from "@/components/ResultCards";
+import { DistributionCard, RatingCard, StatTile } from "@/components/ResultCards";
 import { getForm2Results, type Form2Results } from "@/lib/results";
-// import { cachedValue } from "@/lib/stats-cache";
 
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
 export default async function Form2ResultsPage() {
   let data: Form2Results | null = null;
@@ -18,6 +16,12 @@ export default async function Form2ResultsPage() {
   }
 
   const sorted = data ? [...data.slots].sort((a, b) => b.average - a.average) : [];
+  const bestTies = data?.totalResponses
+    ? sorted.filter((slot) => slot.average === sorted[0]?.average)
+    : [];
+  const worstTies = data?.totalResponses
+    ? sorted.filter((slot) => slot.average === sorted.at(-1)?.average)
+    : [];
 
   return (
     <main className="mx-auto max-w-5xl px-5 py-10">
@@ -54,12 +58,10 @@ export default async function Form2ResultsPage() {
             <StatTile label="Teachers" value={String(data.teachers)} />
             <StatTile
               label="Most liked slot"
-              value={data.bestSlot && data.totalResponses ? data.bestSlot.label : "—"}
-              hint={
-                data.bestSlot && data.totalResponses
-                  ? `avg ${data.bestSlot.average.toFixed(2)}`
-                  : undefined
-              }
+              value={bestTies.length > 1 ? "Tie" : bestTies[0]?.label ?? "—"}
+              hint={bestTies.length > 1
+                ? `${bestTies.map((slot) => slot.label).join(" · ")} (avg ${bestTies[0].average.toFixed(2)})`
+                : bestTies[0] ? `avg ${bestTies[0].average.toFixed(2)}` : undefined}
             />
           </div>
 
@@ -75,7 +77,7 @@ export default async function Form2ResultsPage() {
               <section className="mt-8 rounded-[24px] border border-zinc-200 bg-white p-6 shadow-sm">
                 <h2 className="text-lg font-bold">Slot ranking (highest → lowest)</h2>
                 <div className="mt-4 space-y-3">
-                  {sorted.map((slot, i) => {
+                  {sorted.map((slot) => {
                     const width = Math.round((slot.average / 5) * 100);
                     const tone =
                       slot.average >= 4
@@ -85,7 +87,7 @@ export default async function Form2ResultsPage() {
                           : "bg-red-400";
                     return (
                       <div key={slot.id} className="flex items-center gap-3">
-                        <div className="w-8 text-xs text-zinc-400">#{i + 1}</div>
+                        <div className="w-8 text-xs text-zinc-400">#{1 + sorted.filter((other) => other.average > slot.average).length}</div>
                         <div className="w-28 shrink-0 text-sm font-semibold">{slot.label}</div>
                         <div className="h-7 flex-1 overflow-hidden rounded-lg bg-zinc-100">
                           <div
@@ -102,10 +104,10 @@ export default async function Form2ResultsPage() {
                     );
                   })}
                 </div>
-                {data.worstSlot ? (
+                {worstTies.length > 0 ? (
                   <p className="mt-4 text-xs text-zinc-500">
-                    Least preferred slot: <b>{data.worstSlot.label}</b> (avg{" "}
-                    {data.worstSlot.average.toFixed(2)}) — a strong candidate for reduced allocation.
+                    {worstTies.length > 1 ? "Tied least preferred slots" : "Least preferred slot"}: {" "}
+                    <b>{worstTies.map((slot) => slot.label).join(" · ")}</b> (avg {worstTies[0].average.toFixed(2)}).
                   </p>
                 ) : null}
               </section>
@@ -122,22 +124,8 @@ export default async function Form2ResultsPage() {
               </div>
 
               <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                <div className="rounded-[20px] border border-zinc-200 bg-white p-5 shadow-sm">
-                  <div className="text-[15px] font-semibold">Role split</div>
-                  <div className="mt-4 space-y-2">
-                    {data.roleSplit.rows.map((row) => (
-                      <BarRow key={row.value} row={row} />
-                    ))}
-                  </div>
-                </div>
-                <div className="rounded-[20px] border border-zinc-200 bg-white p-5 shadow-sm">
-                  <div className="text-[15px] font-semibold">Department split</div>
-                  <div className="mt-4 space-y-2">
-                    {data.departmentSplit.rows.map((row) => (
-                      <BarRow key={row.value} row={row} />
-                    ))}
-                  </div>
-                </div>
+                <DistributionCard dist={data.roleSplit} />
+                <DistributionCard dist={data.departmentSplit} />
               </div>
 
               <section className="mt-4 rounded-[24px] border border-zinc-200 bg-white p-6 shadow-sm">
