@@ -5,26 +5,27 @@ import { useEffect, useMemo, useState } from "react";
 import confetti from "canvas-confetti";
 import {
   GraduationCap,
-  Briefcase,
   CheckCircle2,
   Sparkles,
   BarChart3,
-  Building2,
-  MessageSquare,
   ShieldCheck,
 } from "lucide-react";
 import RatingPoll from "@/components/RatingPoll";
 import TimeSlotMatrix from "@/components/TimeSlotMatrix";
+import ProfilePoll from "@/components/ProfilePoll";
+import SurveyNavigator, { focusSurveyQuestion } from "@/components/SurveyNavigator";
 import HomeButton from "@/components/HomeButton";
 import { useSurveyPollStats } from "@/lib/poll-stats-client";
 import { VisualFairness, VisualLongGapForm2 } from "@/components/Visuals";
 import { getBrowserId, isSubmitted, markSubmitted } from "@/lib/browser";
 import {
-  DEPARTMENTS,
   FORM2_COPY,
   FORM2_DEPARTMENT_OPTIONS,
   ROLE_OPTIONS,
   TIME_SLOTS,
+  RATING_SCALE,
+  SURVEY_VERSION,
+  shuffleSessionValues,
 } from "@/lib/survey";
 
 export default function Form2Page() {
@@ -39,6 +40,9 @@ export default function Form2Page() {
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [invalidQuestion, setInvalidQuestion] = useState<string | null>(null);
+  const [invalidSlotId, setInvalidSlotId] = useState<string | null>(null);
+  const [validationMessage, setValidationMessage] = useState("");
   const { stats: batchStats, status: statsStatus } = useSurveyPollStats("form2");
 
   useEffect(() => {
@@ -48,16 +52,33 @@ export default function Form2Page() {
     }
   }, []);
 
+  const [scaleOrders, setScaleOrders] = useState<Record<string, number[]>>({});
+  useEffect(() => {
+    let active = true;
+    const key = `form2-rating-order:v${SURVEY_VERSION}`;
+    let previous: Record<string, number[]> = {};
+    try { previous = JSON.parse(window.sessionStorage.getItem(key) || "{}"); } catch { /* storage optional */ }
+    const values = RATING_SCALE.map(({ value }) => value);
+    const next = {
+      matrix: shuffleSessionValues(values, previous.matrix),
+      long_gap_rating: shuffleSessionValues(values, previous.long_gap_rating),
+      fairness_rating: shuffleSessionValues(values, previous.fairness_rating),
+    };
+    try { window.sessionStorage.setItem(key, JSON.stringify(next)); } catch { /* storage optional */ }
+    queueMicrotask(() => { if (active) setScaleOrders(next); });
+    return () => { active = false; };
+  }, []);
+
   const total = 11;
   const answered = useMemo(() => {
     let count = 0;
     if (role) count += 1;
-    if (department) count += 1;
+    if (department && (department !== "Other" || departmentOther.trim())) count += 1;
     count += Object.keys(timeSlots).length;
-    if (longGap) count += 1;
-    if (fairness) count += 1;
+    if (longGap !== null) count += 1;
+    if (fairness !== null) count += 1;
     return count;
-  }, [role, department, timeSlots, longGap, fairness]);
+  }, [role, department, departmentOther, timeSlots, longGap, fairness]);
 
   const allSlotsRated = TIME_SLOTS.every((s) => Boolean(timeSlots[s.id]));
   const canSubmit =
@@ -68,10 +89,30 @@ export default function Form2Page() {
     fairness !== null &&
     (department !== "Other" || departmentOther.trim().length > 0);
 
+  const navigatorIds = useMemo(() => ["role", "department", "time-slots", "long_gap_rating", "fairness_rating", "feedback"], []);
+  const clearValidation = (id: string) => {
+    if (invalidQuestion === id) {
+      setInvalidQuestion(null);
+      setValidationMessage("");
+    }
+    setError("");
+  };
+
   const submit = async () => {
-    if (!canSubmit || loading) return;
+    if (loading) return;
+    if (!canSubmit) {
+      const missingSlot = TIME_SLOTS.find(({ id }) => !timeSlots[id]);
+      const missing = !role ? "role" : !department || (department === "Other" && !departmentOther.trim())
+        ? "department" : missingSlot ? "time-slots" : longGap === null ? "long_gap_rating" : "fairness_rating";
+      setInvalidQuestion(missing);
+      setInvalidSlotId(missingSlot?.id ?? null);
+      setValidationMessage("Please answer this required question before submitting. / অনুগ্রহ করে এই প্রশ্নের উত্তর দিন।");
+      window.requestAnimationFrame(() => focusSurveyQuestion(missingSlot ? `slot-${missingSlot.id}` : missing));
+      return;
+    }
     setLoading(true);
     setError("");
+    setValidationMessage("");
 
     try {
       const res = await fetch("/api/form2/submit", {
@@ -161,7 +202,7 @@ export default function Form2Page() {
             <CheckCircle2 className="h-10 w-10 stroke-[2.5]" />
           </div>
           <h1 className="mt-6 text-3xl font-black text-zinc-900 tracking-tight">
-            Ratings Submitted!
+            Thank you! Your response has been submitted successfully.
           </h1>
           <p className="mt-2 text-sm text-zinc-500 leading-relaxed">
             ধন্যবাদ! আপনার প্রতিটি টাইম-স্লট এবং দীর্ঘ বিরতি সংক্রান্ত রেটিং সংরক্ষিত হয়েছে।
@@ -206,11 +247,11 @@ export default function Form2Page() {
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3.5">
           <HomeButton />
 
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-bold text-zinc-500 tabular-nums">
-              {answered} of {total} answered
+          <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-3">
+            <span className="whitespace-nowrap text-[11px] font-bold text-zinc-500 tabular-nums sm:text-xs">
+              {answered} / {total} answered
             </span>
-            <div className="h-2.5 w-28 md:w-36 overflow-hidden rounded-full bg-zinc-200">
+            <div className="h-2 w-20 overflow-hidden rounded-full bg-zinc-200 sm:h-2.5 sm:w-28 md:w-36">
               <div
                 className="h-full bg-gradient-to-r from-violet-600 to-indigo-600 transition-all duration-500"
                 style={{ width: `${(answered / total) * 100}%` }}
@@ -245,67 +286,52 @@ export default function Form2Page() {
           </div>
         </div>
 
-        {/* Profile questions — same wording and order as Google Forms */}
-        <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
-          <h3 className="text-[17px] font-bold text-zinc-900">Are you a Student or Teacher? *</h3>
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            {ROLE_OPTIONS.map((option) => {
-              const selected = role === option.value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setRole(option.value)}
-                  className={`flex items-center gap-3 rounded-2xl border-2 p-4 transition-all ${selected
-                    ? "border-violet-600 bg-violet-50/70 font-bold text-violet-950 shadow-md ring-2 ring-violet-500/20"
-                    : "border-zinc-200 bg-white font-medium text-zinc-700 hover:border-violet-300 hover:bg-zinc-50"}`}
-                >
-                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${selected ? "bg-violet-600 text-white" : "bg-zinc-100 text-zinc-500"}`}>
-                    {option.value === "Student" ? <GraduationCap className="h-5 w-5" /> : <Briefcase className="h-5 w-5" />}
-                  </span>
-                  <span className="text-sm font-bold">{option.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
+        {/* Profile questions remain fixed and show their own live results after selection. */}
+        <ProfilePoll
+          id="role"
+          title="Are you a Student or Teacher?"
+          options={ROLE_OPTIONS}
+          value={role}
+          stats={batchStats.role}
+          status={statsStatus}
+          invalid={invalidQuestion === "role"}
+          onChange={(value) => { setRole(value); clearValidation("role"); }}
+        />
 
-        <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
-          <h3 className="text-[17px] font-bold text-zinc-900">Which Department do you belong to? *</h3>
-          <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-            {FORM2_DEPARTMENT_OPTIONS.map((option) => {
-              const selected = department === option.value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setDepartment(option.value)}
-                  className={`flex items-center gap-2 rounded-2xl border-2 px-4 py-3 text-left transition-all ${selected
-                    ? "border-violet-600 bg-violet-50/70 font-bold text-violet-950 shadow-sm"
-                    : "border-zinc-200 bg-white font-medium text-zinc-700 hover:border-violet-300 hover:bg-zinc-50"}`}
-                >
-                  <Building2 className={`h-4 w-4 ${selected ? "text-violet-600" : "text-zinc-400"}`} />
-                  <span className="text-sm">{option.label}</span>
-                </button>
-              );
-            })}
-          </div>
+        <ProfilePoll
+          id="department"
+          title="Which Department do you belong to?"
+          options={FORM2_DEPARTMENT_OPTIONS}
+          value={department}
+          stats={batchStats.department}
+          status={statsStatus}
+          invalid={invalidQuestion === "department"}
+          onChange={(value) => { setDepartment(value); clearValidation("department"); }}
+        >
           {department === "Other" && (
             <input
+              id="department-other"
               value={departmentOther}
-              onChange={(event) => setDepartmentOther(event.target.value)}
-              placeholder="Other"
-              className="mt-3.5 w-full rounded-2xl border-2 border-zinc-200 px-4 py-3 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
+              onChange={(event) => { setDepartmentOther(event.target.value); clearValidation("department"); }}
+              placeholder="Enter your department"
+              aria-label="Other department name"
+              className="mt-3 w-full rounded-xl border-2 border-slate-200 px-4 py-3 text-base outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-slate-600"
             />
           )}
-        </section>
+        </ProfilePoll>
 
         {/* Matrix of 7 time slots */}
         <TimeSlotMatrix
           values={timeSlots}
-          onChange={(id, rating) => setTimeSlots((prev) => ({ ...prev, [id]: rating }))}
+          onChange={(id, rating) => {
+            setTimeSlots((prev) => ({ ...prev, [id]: rating }));
+            setInvalidSlotId(null);
+            clearValidation("time-slots");
+          }}
           initialStats={batchStats}
           statsStatus={statsStatus}
+          invalidSlotId={invalidSlotId}
+          scaleOrder={scaleOrders.matrix}
         />
 
         {/* Questions 2 and 3 — fixed Google Forms order */}
@@ -320,7 +346,9 @@ export default function Form2Page() {
           leftLabel={FORM2_COPY.longGapLeft}
           rightLabel={FORM2_COPY.longGapRight}
           value={longGap}
-          onChange={setLongGap}
+          onChange={(rating) => { setLongGap(rating); clearValidation("long_gap_rating"); }}
+          invalid={invalidQuestion === "long_gap_rating"}
+          scaleOrder={scaleOrders.long_gap_rating}
           visual={<VisualLongGapForm2 />}
         />
 
@@ -335,12 +363,14 @@ export default function Form2Page() {
           leftLabel={FORM2_COPY.fairnessLeft}
           rightLabel={FORM2_COPY.fairnessRight}
           value={fairness}
-          onChange={setFairness}
+          onChange={(rating) => { setFairness(rating); clearValidation("fairness_rating"); }}
+          invalid={invalidQuestion === "fairness_rating"}
+          scaleOrder={scaleOrders.fairness_rating}
           visual={<VisualFairness />}
         />
 
-        {/* Question 4: Free-text feedback */}
-        <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
+        {/* Question 4: Free-text feedback (optional) */}
+        <section id="question-feedback" tabIndex={-1} className="survey-card mb-5 scroll-mt-32 rounded-[24px] border border-zinc-200/80 bg-white p-4 outline-none focus-visible:ring-4 focus-visible:ring-violet-300 sm:mb-6 sm:rounded-[28px] sm:p-7">
           <div className="flex items-center gap-2">
             <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-violet-100 text-xs font-black text-violet-700">
               4
@@ -367,20 +397,20 @@ export default function Form2Page() {
           <button
             type="button"
             onClick={submit}
-            disabled={!canSubmit || loading}
-            className="w-full rounded-[24px] bg-black py-5 text-lg font-black text-white shadow-xl transition-all hover:bg-zinc-800 disabled:opacity-40 disabled:hover:bg-black"
+            disabled={loading}
+            aria-busy={loading}
+            className="w-full min-h-[58px] touch-manipulation rounded-[20px] bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-4 text-base font-black text-white shadow-xl shadow-violet-500/20 transition-all hover:from-violet-500 hover:to-indigo-500 disabled:cursor-wait disabled:opacity-65 sm:rounded-[24px] sm:py-5 sm:text-lg"
           >
             {loading ? "Submitting Ratings…" : `Submit Ratings (${answered}/${total})`}
           </button>
-          <div className="flex items-center justify-center gap-2 text-xs text-zinc-400">
-            <span>🔒 Fully anonymous</span>
-            <span>•</span>
-            <span>One vote per browser</span>
-            <span>•</span>
-            <span>Instant live results</span>
+          <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs text-zinc-400">
+            <span>🔒 Fully anonymous</span><span>•</span>
+            <span>One vote per browser</span><span>•</span>
+            <span>Live results after selection</span>
           </div>
         </div>
       </div>
+      <SurveyNavigator ids={navigatorIds} answered={answered} total={total} validationMessage={validationMessage} />
     </div>
   );
 }

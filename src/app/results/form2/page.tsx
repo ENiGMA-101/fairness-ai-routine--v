@@ -66,12 +66,23 @@ export default async function Form2ResultsPage() {
           </div>
 
           {data.totalResponses === 0 ? (
-            <div className="mt-8 rounded-2xl border border-dashed border-zinc-300 bg-white p-8 text-center text-sm text-zinc-500">
-              No responses yet.{" "}
-              <Link href="/form2" className="font-semibold text-violet-700">
-                Be the first to rate the time slots →
-              </Link>
-            </div>
+            <>
+              <div className="mt-8 rounded-2xl border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-500">
+                No submitted responses yet.{" "}
+                <Link href="/form2" className="font-semibold text-violet-700">
+                  Be the first to rate the time slots →
+                </Link>
+              </div>
+              <div className="mt-6 grid gap-4 lg:grid-cols-2">
+                {data.slots.map((slot) => <RatingCard key={slot.id} summary={slot} />)}
+                <RatingCard summary={data.longGap} />
+                <RatingCard summary={data.fairness} />
+              </div>
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <DistributionCard dist={data.roleSplit} />
+                <DistributionCard dist={data.departmentSplit} />
+              </div>
+            </>
           ) : (
             <>
               <section className="mt-8 rounded-[24px] border border-zinc-200 bg-white p-6 shadow-sm">

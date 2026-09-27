@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { chromium } from "playwright";
 import {
   FORM1_QUESTIONS,
+  SEMESTERS,
   STUDENT_QUESTION_IDS,
   TEACHER_QUESTION_IDS,
   SURVEY_VERSION,
@@ -11,159 +12,198 @@ import {
 
 const baseURL = process.env.TEST_BASE_URL ?? "http://127.0.0.1:3000";
 const browser = await chromium.launch({ headless: true });
-const contextA = await browser.newContext({ baseURL, viewport: { width: 1180, height: 880 } });
-const page = await contextA.newPage();
-page.setDefaultTimeout(10_000);
-const errors = [];
-page.on("pageerror", (error) => errors.push(error.message));
-const sessionKey = `fairness-poll-stats:v${SURVEY_VERSION}:form1`;
-const questionIds = () => page.locator(".survey-card[id]").evaluateAll((cards) => cards.map((card) => card.id.replace("question-", "")));
+const browserErrors = [];
+const testedIds = [];
 
-async function chooseRole(role) {
-  await page.getByRole("button", { name: role, exact: true }).click();
-  await page.locator(".survey-card[id]").first().waitFor({ state: "visible" });
+function watch(page) { page.on("pageerror", (error) => browserErrors.push(error.message)); }
+async function ids(page) {
+  return page.locator('.survey-card[id^="question-"]').evaluateAll((cards) => cards.map((el) => el.id.replace("question-", "")));
+}
+async function values(locator, attr = "data-option-value") {
+  return locator.locator(`[${attr}]`).evaluateAll((items, key) => items.map((item) => item.getAttribute(key)), attr);
+}
+async function submitTeacher(context, id) {
+  const answers = Object.fromEntries(TEACHER_QUESTION_IDS.map((qid) => [
+    qid, FORM1_QUESTIONS.find(({ id: key }) => key === qid).options[0].value,
+  ]));
+  return context.request.post("/api/form1/submit", { data: { browser_id: id, role: "Teacher", department: "CSE", answers } });
 }
 
 try {
-  await page.goto("/", { waitUntil: "load" });
-  assert(await page.locator('a[href="/form1"]').last().isVisible());
-  assert(await page.locator('a[href="/form2"]').last().isVisible());
-  console.log("PASS both surveys are immediately accessible from Home");
-
-  const studentOrders = new Set();
-  for (let i = 0; i < 5; i += 1) {
-    await page.goto("/form1", { waitUntil: "load" });
-    await chooseRole("Student");
-    const ids = await questionIds();
-    assert.equal(ids[0], "semester", "Semester must always be the first role-specific question");
-    assert.deepEqual(new Set(ids), new Set(STUDENT_QUESTION_IDS));
-    assert(ids.every((id) => !TEACHER_QUESTION_IDS.includes(id)), "Teacher questions cannot appear in Student section");
-    studentOrders.add(ids.join(","));
+  for (const width of [360, 390, 430, 768, 1360]) {
+    const context = await browser.newContext({ baseURL, viewport: { width, height: width < 500 ? 800 : 900 } });
+    await context.addInitScript(() => localStorage.setItem("fairness-theme", "dark"));
+    const page = await context.newPage(); watch(page);
+    for (const path of ["/", "/form1", "/form2"]) {
+      await page.goto(path, { waitUntil: "load" });
+      await page.waitForFunction(() => document.documentElement.classList.contains("dark"));
+      assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${width}px ${path}: no horizontal scrolling`);
+      if (path === "/") {
+        const one = page.getByRole("link", { name: /Open Form 1 — Student and Teacher Survey/ });
+        const two = page.getByRole("link", { name: /Open Form 2 — Time-Slot Rating Survey/ });
+        assert(await one.isVisible() && await two.isVisible(), `${width}px: both surveys visible`);
+        if (width < 500) {
+          const card = await two.boundingBox();
+          assert(card && card.y < 800, `${width}px: Form 2 choice appears in first viewport`);
+        }
+      }
+      if (path === "/form1" || path === "/form2") {
+        const roleButton = page.locator('#question-role button[data-profile-option="Student"]');
+        const box = await roleButton.boundingBox();
+        assert(box && box.height >= 44 && box.width >= 100, `${width}px ${path}: entire role card is touch friendly`);
+        await roleButton.click();
+        await page.locator('#question-role [data-profile-result="Teacher"]').waitFor();
+        assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${width}px ${path} with results: no horizontal scrolling`);
+        assert(await page.getByRole("button", { name: "Next question" }).isVisible());
+      }
+    }
+    await context.close();
+    console.log(`PASS ${width}px: dark theme, both forms accessible, touch targets, live profile results, no overflow`);
   }
-  assert(studentOrders.size > 1, "Student questions shuffle between entries");
-  console.log(`PASS semester fixed; Student questions shuffle across ${studentOrders.size} different visits`);
 
+  const context = await browser.newContext({ baseURL, viewport: { width: 1024, height: 900 } });
+  const page = await context.newPage(); watch(page);
+  page.setDefaultTimeout(10_000);
+  const studentOrders = new Set();
+  let previousOptionOrder = null;
+  for (let n = 0; n < 4; n++) {
+    await page.goto("/form1", { waitUntil: "load" });
+    await page.locator('#question-role button[data-profile-option="Student"]').click();
+    await page.locator("#question-semester").waitFor();
+    await page.waitForTimeout(90); // client-only session shuffle has completed
+    const current = await ids(page);
+    assert.deepEqual(current.slice(0, 3), ["role", "department", "semester"]);
+    assert.deepEqual(new Set(current.slice(2)), new Set(STUDENT_QUESTION_IDS));
+    assert(current.every((id) => !TEACHER_QUESTION_IDS.includes(id)), "No teacher-only questions in Student form");
+    assert.deepEqual(await values(page.locator("#question-semester")), SEMESTERS, "Semester choices always canonical");
+    studentOrders.add(current.join(","));
+    const optionOrder = await values(page.locator("#question-q_avoid"));
+    if (previousOptionOrder) assert.notDeepEqual(optionOrder, previousOptionOrder, "Options change order on each entry");
+    previousOptionOrder = optionOrder;
+    assert.equal(await page.locator('#question-q_avoid [data-poll-result]').count(), 0, "Unanswered question hides results");
+  }
+  assert(studentOrders.size > 1, "Student questions shuffle across sessions");
+  console.log("PASS Student questions and options shuffle; profile and semester stay fixed");
+
+  await page.locator('#question-department button[data-profile-option="CSE"]').click();
   const semester = page.locator("#question-semester");
-  assert.equal(await semester.locator("[data-poll-result]").count(), 0, "Unanswered question never shows a percentage");
-  await page.waitForFunction((key) => {
-    const raw = sessionStorage.getItem(key);
-    return raw && !!JSON.parse(raw).data.semester;
-  }, sessionKey);
-  const beforeSelection = (await (await contextA.request.get("/api/form1/stats/all")).json()).semester;
-  await semester.locator("button").first().click();
-  await semester.locator("[data-poll-result]").first().waitFor({ state: "visible" });
-  assert.equal(await semester.locator("[data-poll-result]").count(), 8);
-  await semester.locator("button").last().click();
-  assert.equal((await (await contextA.request.get("/api/form1/stats/all")).json()).semester.total, beforeSelection.total);
-  console.log("PASS selecting and changing an answer reveals results but does not submit a vote");
+  await semester.locator('button[data-option-value="1.1"]').click();
+  await semester.locator("[data-poll-result]").first().waitFor();
+  assert.equal(await semester.locator("[data-poll-result]").count(), 8, "Semester reveals every option including zero votes");
+  const baseline = (await (await context.request.get("/api/form1/stats/all")).json()).semester;
+  await semester.locator('button[data-option-value="1.2"]').click();
+  const unchanged = (await (await context.request.get("/api/form1/stats/all")).json()).semester;
+  assert.deepEqual(unchanged, baseline, "Changing an answer before Submit never changes database statistics");
+  const nav = page.getByRole("navigation", { name: "Survey question navigation" });
+  assert(await nav.getByRole("button", { name: "Next question" }).isVisible());
+  console.log("PASS fixed Semester choices, all results including 0%, no vote on selection changes");
 
   const teacherOrders = new Set();
-  for (let i = 0; i < 4; i += 1) {
+  for (let n = 0; n < 4; n++) {
     await page.goto("/form1", { waitUntil: "load" });
-    await chooseRole("Teacher");
-    const ids = await questionIds();
-    assert.deepEqual(new Set(ids), new Set(TEACHER_QUESTION_IDS));
-    assert(ids.every((id) => !STUDENT_QUESTION_IDS.includes(id)), "Student questions cannot appear in Teacher section");
-    teacherOrders.add(ids.join(","));
+    await page.locator('#question-role button[data-profile-option="Teacher"]').click();
+    await page.locator("#question-q_teaching_schedule").waitFor();
+    await page.waitForTimeout(90);
+    const current = await ids(page);
+    assert.deepEqual(current.slice(0, 2), ["role", "department"]);
+    assert.deepEqual(new Set(current.slice(2)), new Set(TEACHER_QUESTION_IDS));
+    assert(!current.includes("semester"), "Semester is Student-only");
+    teacherOrders.add(current.join(","));
   }
   assert(teacherOrders.size > 1, "Teacher questions shuffle independently");
-  console.log(`PASS Teacher-only questions shuffle across ${teacherOrders.size} visits; no audience mixing`);
+  console.log("PASS Teacher-only questions shuffle without Student questions");
 
-  await page.waitForFunction((key) => {
-    const raw = sessionStorage.getItem(key);
-    return raw && !!JSON.parse(raw).data.q_teaching_schedule;
-  }, sessionKey);
   const teacherCard = page.locator("#question-q_teaching_schedule");
-  const beforeVote = (await (await contextA.request.get("/api/form1/stats/all")).json()).q_teaching_schedule;
-  await teacherCard.locator("button").first().click();
-  assert.equal(await teacherCard.locator("[data-poll-result]").count(), 2, "Both poll options revealed after one click");
-  await teacherCard.locator("button").last().click();
-  assert.equal((await (await contextA.request.get("/api/form1/stats/all")).json()).q_teaching_schedule.total, beforeVote.total);
-
-  // A second isolated browser context submits a full Teacher survey. The first
-  // browser stays on the poll; its visible percentages must update by polling.
+  await teacherCard.locator("button[data-option-value]").first().click();
+  await teacherCard.locator("[data-poll-result]").first().waitFor();
+  const before = (await (await context.request.get("/api/form1/stats/all")).json()).q_teaching_schedule;
+  const optionOrderBefore = await values(teacherCard);
   const contextB = await browser.newContext({ baseURL });
-  const testId = `poll-regression-${randomUUID()}`;
-  const teacherAnswers = Object.fromEntries(TEACHER_QUESTION_IDS.map((id) => [
-    id, FORM1_QUESTIONS.find((question) => question.id === id).options[0].value,
-  ]));
-  const submitted = await contextB.request.post("/api/form1/submit", {
-    data: { browser_id: testId, role: "Teacher", department: "CSE", answers: teacherAnswers },
-  });
-  assert.equal(submitted.status(), 200, `Second browser submission: ${await submitted.text()}`);
-  await page.waitForFunction((expected) => {
-    const card = document.querySelector("#question-q_teaching_schedule");
-    return card?.textContent?.includes(`All options · ${expected} submitted response`);
-  }, beforeVote.total + 1, { timeout: 22_000 });
-  const refreshed = (await (await contextA.request.get("/api/form1/stats/all")).json()).q_teaching_schedule;
-  assert.equal(refreshed.total, beforeVote.total + 1);
-  for (const [option, count] of Object.entries(refreshed.counts)) {
-    const row = teacherCard.locator(`[data-poll-result="${option}"]`);
+  const teacherId = `mobile-regression-${randomUUID()}`; testedIds.push(teacherId);
+  const response = await submitTeacher(contextB, teacherId);
+  assert.equal(response.status(), 200, `Second browser vote: ${await response.text()}`);
+  await page.waitForFunction((total) => document.querySelector("#question-q_teaching_schedule")?.textContent?.includes(`All options · ${total} submitted response`), before.total + 1, { timeout: 20_000 });
+  const updated = (await (await context.request.get("/api/form1/stats/all")).json()).q_teaching_schedule;
+  assert.equal(updated.total, before.total + 1);
+  assert.deepEqual(await values(teacherCard), optionOrderBefore, "Option order stays stable while live stats refresh");
+  for (const [key, count] of Object.entries(updated.counts)) {
+    const row = teacherCard.locator(`[data-poll-result="${key}"]`);
     assert((await row.innerText()).includes(`${count} vote`));
-    assert((await row.innerText()).includes(`${refreshed.percentages[option]}%`));
+    assert((await row.innerText()).includes(`${updated.percentages[key]}%`));
   }
-  console.log("PASS another browser's submission updates the open poll automatically without reloading");
   await contextB.close();
+  console.log("PASS another browser's submission refreshes every visible result without moving answer cards");
 
-  // Mock one aggregate response to confirm options are sorted by live percentage
-  // in the SURVEY only. No votes are inserted by this display-order test.
-  const contextC = await browser.newContext({ baseURL });
-  const actual = await (await contextC.request.get("/api/form1/stats/all")).json();
-  await contextC.route("**/api/form1/stats/all", async (route) => route.fulfill({
-    status: 200, contentType: "application/json",
-    body: JSON.stringify({ ...actual, q_avoid: {
-      total: 10,
-      counts: { morning: 2, evening: 8 },
-      percentages: { morning: 20, evening: 80 },
-    } }),
-  }));
-  const rankedPage = await contextC.newPage();
-  await rankedPage.goto("/form1", { waitUntil: "load" });
-  await rankedPage.getByRole("button", { name: "Student", exact: true }).click();
-  const ranked = rankedPage.locator("#question-q_avoid");
-  await ranked.waitFor({ state: "visible" });
-  await rankedPage.waitForFunction((version) => {
-    const raw = sessionStorage.getItem(`fairness-poll-stats:v${version}:form1`);
-    return raw && JSON.parse(raw).data.q_avoid.percentages.evening === 80;
-  }, SURVEY_VERSION);
-  assert((await ranked.locator("button").first().innerText()).includes("বিকেল"));
-  assert.equal(await ranked.locator("[data-poll-result]").count(), 0);
-  await ranked.locator("button").first().click();
-  assert.equal(await ranked.locator("[data-poll-result]").count(), 2);
-  assert((await ranked.locator("[data-poll-result]").first().innerText()).includes("80%"));
-  await contextC.close();
-  console.log("PASS survey options sort by live percentage; unclicked results stay hidden");
+  // The Submit button stays usable when incomplete, tells a beginner what is
+  // missing and moves focus to the first unanswered question.
+  const contextStudent = await browser.newContext({ baseURL });
+  const studentPage = await contextStudent.newPage(); watch(studentPage);
+  const studentId = `mobile-regression-${randomUUID()}`; testedIds.push(studentId);
+  await studentPage.addInitScript((id) => localStorage.setItem("fairness_browser_id", id), studentId);
+  await studentPage.goto("/form1");
+  await studentPage.locator('#question-role button[data-profile-option="Student"]').click();
+  await studentPage.getByRole("button", { name: /^Submit Response/ }).click();
+  await studentPage.locator('#question-department[data-invalid="true"]').waitFor();
+  assert(await studentPage.getByRole("alert").isVisible(), "Missing required answer shows clear message");
+  await studentPage.waitForFunction(() => document.activeElement?.id === "question-department");
+  await studentPage.locator('#question-department button[data-profile-option="CSE"]').click();
+  for (const question of FORM1_QUESTIONS.filter(({ audience }) => audience === "Student")) {
+    await studentPage.locator(`#question-${question.id} button[data-option-value="${question.options[0].value}"]`).click();
+  }
+  const submitButton = studentPage.getByRole("button", { name: /^Submit Response/ });
+  assert(await submitButton.isEnabled());
+  await submitButton.click();
+  await studentPage.getByText("Thank you! Your response has been submitted successfully.").waitFor();
+  await studentPage.goto("/form1");
+  await studentPage.getByText("You have already submitted this survey").waitFor();
+  await contextStudent.close();
+  console.log("PASS required validation, focus, successful Student submission, duplicate screen");
 
-  const apiOne = await (await contextA.request.get("/api/form1/results")).json();
+  const contextForm2 = await browser.newContext({ baseURL });
+  const form2 = await contextForm2.newPage(); watch(form2);
+  const form2Id = `mobile-regression-${randomUUID()}`; testedIds.push(form2Id);
+  await form2.addInitScript((id) => localStorage.setItem("fairness_browser_id", id), form2Id);
+  await form2.goto("/form2");
+  await form2.waitForTimeout(80);
+  const ratingOrderFirst = await values(form2.locator(`#slot-${TIME_SLOTS[0].id}`), "data-rating-value");
+  await form2.reload();
+  await form2.waitForTimeout(80);
+  const ratingOrderNext = await values(form2.locator(`#slot-${TIME_SLOTS[0].id}`), "data-rating-value");
+  assert.notDeepEqual(ratingOrderNext, ratingOrderFirst, "Form 2 rating options shuffle per entry");
+  assert.deepEqual(new Set(ratingOrderNext), new Set(["1", "2", "3", "4", "5"]));
+  await form2.locator('#question-role button[data-profile-option="Student"]').click();
+  await form2.locator('#question-department button[data-profile-option="EEE"]').click();
+  await form2.getByRole("button", { name: /^Submit Ratings/ }).click();
+  await form2.locator('#slot-time_slot_8_00').waitFor();
+  assert(await form2.locator('#question-time-slots').getAttribute("class").then((s) => s.includes("border-rose-400")));
+  for (const [index, slot] of TIME_SLOTS.entries()) {
+    await form2.locator(`#slot-${slot.id} button[data-rating-value="${index % 5 + 1}"]`).click();
+  }
+  for (const key of ["long_gap_rating", "fairness_rating"]) {
+    await form2.locator(`#question-${key} button[data-rating-value="4"]`).click();
+  }
+  await form2.getByRole("button", { name: /^Submit Ratings/ }).click();
+  await form2.getByText("Thank you! Your response has been submitted successfully.").waitFor();
+  await form2.goto("/form2");
+  await form2.getByText("You have already submitted this survey").waitFor();
+  await contextForm2.close();
+  console.log("PASS Form 2 required validation, seven ratings, success and duplicate prevention");
+
+  const apiOne = await (await context.request.get("/api/form1/results")).json();
   assert.deepEqual(apiOne.distributions.map(({ id }) => id), FORM1_QUESTIONS.map(({ id }) => id));
-  await page.goto("/results/form1", { waitUntil: "load" });
-  assert.deepEqual(
-    await page.locator("article h3").allTextContents(),
-    apiOne.distributions.filter(({ total }) => total > 0).map(({ title }) => title),
-    "Dedicated Form 1 results preserve canonical question order",
-  );
-  console.log("PASS dedicated Form 1 results preserve original serial order");
-
-  const form2Id = `poll-regression-${randomUUID()}`;
-  const responseTwo = await contextA.request.post("/api/form2/submit", {
-    data: {
-      browser_id: form2Id, role: "Student", department: "EEE",
-      time_slots: Object.fromEntries(TIME_SLOTS.map(({ id }, index) => [id, (index % 5) + 1])),
-      long_gap_rating: 2, fairness_rating: 5, feedback: "",
-    },
-  });
-  assert.equal(responseTwo.status(), 200, `Form 2 test response: ${await responseTwo.text()}`);
-  const apiTwo = await (await contextA.request.get("/api/form2/results")).json();
+  await page.goto("/results/form1");
+  assert.deepEqual(await page.locator("article h3").allTextContents(), FORM1_QUESTIONS.map(({ titleBn }) => titleBn));
+  const apiTwo = await (await context.request.get("/api/form2/results")).json();
   assert.deepEqual(apiTwo.slots.map(({ id }) => id), TIME_SLOTS.map(({ id }) => id));
-  await page.goto("/results/form2", { waitUntil: "load" });
-  const resultLabels = await page.locator("article h3").allTextContents();
-  assert.deepEqual(resultLabels.slice(0, 9), [
-    ...apiTwo.slots.map(({ label }) => label), apiTwo.longGap.label, apiTwo.fairness.label,
-  ], "Dedicated Form 2 results keep original slot and question order");
-  console.log("PASS dedicated Form 2 results preserve original serial order");
+  await page.goto("/results/form2");
+  const cardTitles = await page.locator("article h3").allTextContents();
+  assert.deepEqual(cardTitles.slice(0, 9), [...apiTwo.slots.map(({ label }) => label), apiTwo.longGap.label, apiTwo.fairness.label]);
+  console.log("PASS both dedicated results pages retain canonical question and slot order");
 
-  assert.deepEqual(errors, [], "No browser runtime errors");
-  console.log("All browser poll regression checks passed. Clean up poll-regression-* rows after testing.");
+  assert.deepEqual(browserErrors, [], "No browser runtime errors");
+  await context.close();
+  console.log("All mobile survey browser checks passed.");
 } finally {
   await browser.close();
+  console.log(`Temporary test browser IDs: ${testedIds.join(", ")}`);
 }
