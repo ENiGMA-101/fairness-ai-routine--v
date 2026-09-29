@@ -50,17 +50,22 @@ export default async function Form1ResultsPage() {
             <StatTile label="Teachers" value={String(data.teachers)} />
           </div>
 
-          {data.totalResponses === 0 && (
-            <div className="mt-8 rounded-2xl border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-500">
-              No submitted responses yet.{" "}
-              <Link href="/form1" className="font-semibold text-violet-700">Be the first to answer Form 1 →</Link>
+          {data.totalResponses === 0 ? (
+            <div className="mt-8 rounded-2xl border border-dashed border-zinc-300 bg-white p-8 text-center text-sm text-zinc-500">
+              No responses yet.{" "}
+              <Link href="/form1" className="font-semibold text-violet-700">
+                Be the first to answer Form 1 →
+              </Link>
+            </div>
+          ) : (
+            <div className="mt-8 grid gap-4 lg:grid-cols-2">
+              {data.distributions
+                .filter((d) => d.total > 0)
+                .map((dist) => (
+                  <DistributionCard key={dist.id} dist={dist} />
+                ))}
             </div>
           )}
-          <div className="mt-8 grid gap-4 lg:grid-cols-2">
-            {data.distributions.map((dist) => (
-              <DistributionCard key={dist.id} dist={dist} />
-            ))}
-          </div>
         </>
       ) : null}
     </main>

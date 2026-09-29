@@ -1,3 +1,5 @@
+import type { Option } from "@/lib/survey";
+
 /** Statistics for one question, counting only valid, submitted answers. */
 export type VoteStats = {
   total: number;
@@ -38,4 +40,21 @@ export function leadingValues<T extends { value: string; count: number }>(
   return highest === 0 ? [] : rows.filter(({ count }) => count === highest);
 }
 
-
+/**
+ * Interactive survey only: rank by live percentage, then actual count, then
+ * original order. The canonical definitions and results pages are never sorted.
+ */
+export function sortOptionsByLivePercentage<T extends Option>(
+  options: readonly T[],
+  stats?: VoteStats | null,
+): T[] {
+  if (!stats || stats.total === 0) return [...options];
+  return options
+    .map((option, index) => ({ option, index }))
+    .sort((a, b) => {
+      const percentDiff = (stats.percentages[b.option.value] ?? 0) - (stats.percentages[a.option.value] ?? 0);
+      const countDiff = (stats.counts[b.option.value] ?? 0) - (stats.counts[a.option.value] ?? 0);
+      return percentDiff || countDiff || a.index - b.index;
+    })
+    .map(({ option }) => option);
+}

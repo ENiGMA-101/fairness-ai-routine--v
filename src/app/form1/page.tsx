@@ -4,15 +4,16 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import confetti from "canvas-confetti";
 import {
+  GraduationCap,
+  Briefcase,
   CheckCircle2,
   ArrowRight,
   Sparkles,
   BarChart3,
+  Building2,
   ShieldCheck,
 } from "lucide-react";
 import PollCard from "@/components/PollCard";
-import ProfilePoll from "@/components/ProfilePoll";
-import SurveyNavigator, { focusSurveyQuestion } from "@/components/SurveyNavigator";
 import HomeButton from "@/components/HomeButton";
 import { FORM1_VISUALS } from "@/components/Visuals";
 import { useSurveyPollStats } from "@/lib/poll-stats-client";
@@ -23,10 +24,7 @@ import {
   ROLE_OPTIONS,
   STUDENT_SECTION_INTRO,
   TEACHER_SECTION_INTRO,
-  SURVEY_VERSION,
-  shuffleSurveyOptions,
   shuffleSurveyQuestions,
-  type Option,
 } from "@/lib/survey";
 const QUESTIONS = FORM1_QUESTIONS.filter((q) => q.id !== "role" && q.id !== "department");
 
@@ -38,8 +36,6 @@ export default function Form1Page() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [invalidQuestion, setInvalidQuestion] = useState<string | null>(null);
-  const [validationMessage, setValidationMessage] = useState("");
   const { stats: batchStats, status: statsStatus } = useSurveyPollStats("form1");
   // Distinguishes "just submitted" from "already submitted earlier on this browser"
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
@@ -51,37 +47,11 @@ export default function Form1Page() {
     }
   }, []);
 
-  // Shuffle display only once per entry. Profile/semester stay in their fixed
-  // positions and semester choices stay canonical, regardless of live stats.
+  // Shuffle only the display order on each client visit. Semester stays first;
+  // Student and Teacher questions never enter each other's section.
   const [displayQuestions, setDisplayQuestions] = useState(() => [...QUESTIONS]);
-  const [optionOrders, setOptionOrders] = useState<Record<string, Option[]>>({});
   useEffect(() => {
-    let active = true;
-    const optionKey = `form1-option-order:v${SURVEY_VERSION}`;
-    const questionKey = `form1-question-order:v${SURVEY_VERSION}`;
-    let lastOptions: Record<string, string[]> = {};
-    let lastQuestions: Partial<Record<"Student" | "Teacher", string[]>> = {};
-    try {
-      lastOptions = JSON.parse(window.sessionStorage.getItem(optionKey) || "{}");
-      lastQuestions = JSON.parse(window.sessionStorage.getItem(questionKey) || "{}");
-    } catch { /* private mode: randomization still works */ }
-    const questions = shuffleSurveyQuestions(QUESTIONS, Math.random, lastQuestions);
-    const options = shuffleSurveyOptions(QUESTIONS, lastOptions);
-    try {
-      window.sessionStorage.setItem(optionKey, JSON.stringify(Object.fromEntries(
-        Object.entries(options).map(([id, choices]) => [id, choices.map(({ value }) => value)]),
-      )));
-      window.sessionStorage.setItem(questionKey, JSON.stringify({
-        Student: questions.filter((q) => q.audience === "Student" && q.id !== "semester").map((q) => q.id),
-        Teacher: questions.filter((q) => q.audience === "Teacher").map((q) => q.id),
-      }));
-    } catch { /* storage is optional */ }
-    queueMicrotask(() => {
-      if (!active) return;
-      setDisplayQuestions(questions);
-      setOptionOrders(options);
-    });
-    return () => { active = false; };
+    setDisplayQuestions(shuffleSurveyQuestions(QUESTIONS));
   }, []);
 
   const visible = useMemo(
@@ -97,10 +67,10 @@ export default function Form1Page() {
   const answered = useMemo(() => {
     let count = 0;
     if (role) count += 1;
-    if (department && (department !== "Other" || departmentOther.trim())) count += 1;
+    if (department) count += 1;
     count += visible.filter((q) => Boolean(answers[q.id])).length;
     return count;
-  }, [role, department, departmentOther, answers, visible]);
+  }, [role, department, answers, visible]);
 
   const canSubmit =
     Boolean(role) &&
@@ -109,32 +79,13 @@ export default function Form1Page() {
     visible.every((q) => Boolean(answers[q.id])) &&
     (department !== "Other" || departmentOther.trim().length > 0);
 
-  const navigatorIds = useMemo(() => ["role", "department", ...visible.map((q) => q.id)], [visible]);
-  const clearValidation = (id: string) => {
-    if (invalidQuestion === id) {
-      setInvalidQuestion(null);
-      setValidationMessage("");
-    }
-    setError("");
-  };
-  const setAnswer = (id: string, value: string) => {
+  const setAnswer = (id: string, value: string) =>
     setAnswers((prev) => ({ ...prev, [id]: value }));
-    clearValidation(id);
-  };
 
   const submit = async () => {
-    if (loading) return;
-    if (!canSubmit) {
-      const missing = !role ? "role" : !department || (department === "Other" && !departmentOther.trim())
-        ? "department" : visible.find((q) => !answers[q.id])?.id ?? "role";
-      setInvalidQuestion(missing);
-      setValidationMessage("Please answer this required question before submitting. / অনুগ্রহ করে এই প্রশ্নের উত্তর দিন।");
-      window.requestAnimationFrame(() => focusSurveyQuestion(missing));
-      return;
-    }
+    if (!canSubmit || loading) return;
     setLoading(true);
     setError("");
-    setValidationMessage("");
 
     try {
       const res = await fetch("/api/form1/submit", {
@@ -221,7 +172,7 @@ export default function Form1Page() {
             <CheckCircle2 className="h-10 w-10 stroke-[2.5]" />
           </div>
           <h1 className="mt-6 text-3xl font-black text-zinc-900 tracking-tight">
-            Thank you! Your response has been submitted successfully.
+            Response Submitted!
           </h1>
           <p className="mt-2 text-sm text-zinc-500 leading-relaxed">
             ধন্যবাদ! আপনার মূল্যবান মতামত সংরক্ষিত হয়েছে। আপনার মতামত এআই রুটিন জেনারেটরের ন্যায্যতা
@@ -265,11 +216,11 @@ export default function Form1Page() {
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3.5">
           <HomeButton />
 
-          <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-3">
-            <span className="whitespace-nowrap text-[11px] font-bold text-zinc-500 tabular-nums sm:text-xs">
-              {answered} / {total} answered
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-bold text-zinc-500 tabular-nums">
+              {answered} of {total} answered
             </span>
-            <div className="h-2 w-20 overflow-hidden rounded-full bg-zinc-200 sm:h-2.5 sm:w-28 md:w-36">
+            <div className="h-2.5 w-28 md:w-36 overflow-hidden rounded-full bg-zinc-200">
               <div
                 className="h-full bg-gradient-to-r from-violet-600 to-indigo-600 transition-all duration-500"
                 style={{ width: `${total ? (answered / total) * 100 : 0}%` }}
@@ -304,39 +255,60 @@ export default function Form1Page() {
           </div>
         </div>
 
-        {/* Profile questions remain fixed, but results reveal after selection. */}
-        <ProfilePoll
-          id="role"
-          title="Are you a Student or Teacher?"
-          options={ROLE_OPTIONS}
-          value={role}
-          stats={batchStats.role}
-          status={statsStatus}
-          invalid={invalidQuestion === "role"}
-          onChange={(value) => { setRole(value); clearValidation("role"); }}
-        />
+        {/* Common profile questions — same wording and order as Google Forms */}
+        <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
+          <h3 className="text-[17px] font-bold text-zinc-900">Are you a Student or Teacher? *</h3>
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            {ROLE_OPTIONS.map((option) => {
+              const selected = role === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setRole(option.value)}
+                  className={`flex flex-col items-center justify-center rounded-2xl border-2 p-5 transition-all ${selected
+                    ? "border-violet-600 bg-violet-50/70 shadow-md ring-2 ring-violet-500/20"
+                    : "border-zinc-200 bg-white hover:border-violet-300 hover:bg-zinc-50"}`}
+                >
+                  <span className={`mb-2 flex h-12 w-12 items-center justify-center rounded-2xl ${selected ? "bg-violet-600 text-white" : "bg-violet-100 text-violet-600"}`}>
+                    {option.value === "Student" ? <GraduationCap className="h-6 w-6" /> : <Briefcase className="h-6 w-6" />}
+                  </span>
+                  <span className="text-base font-bold text-zinc-900">{option.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
 
-        <ProfilePoll
-          id="department"
-          title="Which department do you belong to?"
-          options={DEPARTMENT_OPTIONS}
-          value={department}
-          stats={batchStats.department}
-          status={statsStatus}
-          invalid={invalidQuestion === "department"}
-          onChange={(value) => { setDepartment(value); clearValidation("department"); }}
-        >
+        <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
+          <h3 className="text-[17px] font-bold text-zinc-900">Which department do you belong to? *</h3>
+          <div className="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+            {DEPARTMENT_OPTIONS.map((option) => {
+              const selected = department === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setDepartment(option.value)}
+                  className={`flex items-center gap-2 rounded-2xl border-2 px-4 py-3 text-left transition-all ${selected
+                    ? "border-violet-600 bg-violet-50/70 font-bold text-violet-950 shadow-sm"
+                    : "border-zinc-200 bg-white font-medium text-zinc-700 hover:border-violet-300 hover:bg-zinc-50"}`}
+                >
+                  <Building2 className={`h-4 w-4 ${selected ? "text-violet-600" : "text-zinc-400"}`} />
+                  <span className="text-sm">{option.label}</span>
+                </button>
+              );
+            })}
+          </div>
           {department === "Other" && (
             <input
-              id="department-other"
               value={departmentOther}
-              onChange={(event) => { setDepartmentOther(event.target.value); clearValidation("department"); }}
-              placeholder="Enter your department"
-              aria-label="Other department name"
-              className="mt-3 w-full rounded-xl border-2 border-slate-200 px-4 py-3 text-base outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-slate-600"
+              onChange={(event) => setDepartmentOther(event.target.value)}
+              placeholder="Other"
+              className="mt-3.5 w-full rounded-2xl border-2 border-zinc-200 px-4 py-3 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
             />
           )}
-        </ProfilePoll>
+        </section>
 
         {role && (
           <section className="mb-6 rounded-[28px] border border-violet-200 bg-gradient-to-br from-violet-50 to-sky-50 p-6 shadow-sm dark:border-violet-500/30 dark:from-violet-500/10 dark:to-sky-500/10">
@@ -381,13 +353,12 @@ export default function Form1Page() {
                 index={i + 1}
                 title={q.titleBn}
                 subtitle={q.titleEn}
-                options={optionOrders[q.id] ?? q.options}
+                options={q.options}
                 value={answers[q.id] ?? null}
                 onChange={(v) => setAnswer(q.id, v)}
                 visual={Visual ? <Visual /> : undefined}
                 initialStats={batchStats[q.id] ?? null}
                 statsStatus={statsStatus}
-                invalid={invalidQuestion === q.id}
               />
             );
           })
@@ -404,20 +375,20 @@ export default function Form1Page() {
           <button
             type="button"
             onClick={submit}
-            disabled={loading}
-            aria-busy={loading}
-            className="w-full min-h-[58px] touch-manipulation rounded-[20px] bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-4 text-base font-black text-white shadow-xl shadow-violet-500/20 transition-all hover:from-violet-500 hover:to-indigo-500 disabled:cursor-wait disabled:opacity-65 sm:rounded-[24px] sm:py-5 sm:text-lg"
+            disabled={!canSubmit || loading}
+            className="w-full rounded-[24px] bg-black py-5 text-lg font-black text-white shadow-xl transition-all hover:bg-zinc-800 disabled:opacity-40 disabled:hover:bg-black"
           >
             {loading ? "Submitting Response…" : `Submit Response (${answered}/${total})`}
           </button>
-          <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs text-zinc-400">
-            <span>🔒 Fully anonymous</span><span>•</span>
-            <span>One vote per browser</span><span>•</span>
-            <span>Live results after selection</span>
+          <div className="flex items-center justify-center gap-2 text-xs text-zinc-400">
+            <span>🔒 Fully anonymous</span>
+            <span>•</span>
+            <span>One vote per browser</span>
+            <span>•</span>
+            <span>Instant live results</span>
           </div>
         </div>
       </div>
-      <SurveyNavigator ids={navigatorIds} answered={answered} total={total} validationMessage={validationMessage} />
     </div>
   );
 }

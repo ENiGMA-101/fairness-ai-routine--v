@@ -6,7 +6,7 @@ A bilingual university research survey built with Next.js App Router, Tailwind a
 
 - **`/`**: research topic, immediate access to both surveys, live response counters and aggregate insights.
 - **`/form1`**: original bilingual questions and diagrams, with role, department and semester fixed; the remaining Student/Teacher questions shuffle independently on each visit. Survey option buttons sort by their live percentage. Clicking one reveals all options' current counts and percentages; changing an answer never casts a vote.
-- **`/form2`**: the same seven time-slot rows and 1–5 ratings with live, sorted answer choices; each selected slot/question reveals all its valid submitted results.
+- **`/form2`**: seven time-slot rows and the two rating questions always display choices in fixed numeric order **1, 2, 3, 4, 5**, even as live results change; each selected slot/question reveals all valid submitted results. No next/previous buttons are used.
 - **`/results/form1`** and **`/results/form2`**: live aggregate results remain in original question and option order. Highest-count options are highlighted correctly; ties are labeled rather than claiming a unique leader.
 - A site-wide light/dark theme switch remembers your choice in the browser.
 

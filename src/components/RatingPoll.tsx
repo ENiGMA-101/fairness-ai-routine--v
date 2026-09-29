@@ -17,8 +17,6 @@ type Props = {
   index?: number;
   initialStats?: PollStatsMap | null;
   statsStatus?: "loading" | "ready" | "error";
-  invalid?: boolean;
-  scaleOrder?: readonly number[];
 };
 
 const SCALE = [
@@ -41,14 +39,9 @@ export default function RatingPoll({
   index,
   initialStats,
   statsStatus = "loading",
-  invalid = false,
-  scaleOrder,
 }: Props) {
   const [clicked, setClicked] = useState(false);
   const stats: PollStats | null = initialStats?.[questionId] ?? null;
-  const orderedScale = scaleOrder?.length === SCALE.length
-    ? scaleOrder.map((n) => SCALE.find((item) => item.n === n)!).filter(Boolean)
-    : SCALE;
   const showAllResults = clicked && stats !== null;
 
   function select(rating: number) {
@@ -57,7 +50,7 @@ export default function RatingPoll({
   }
 
   return (
-    <section id={`question-${questionId}`} tabIndex={-1} data-invalid={invalid ? "true" : undefined} className={`survey-card mb-5 min-w-0 scroll-mt-32 rounded-[24px] border bg-white p-4 shadow-[0_12px_36px_-28px_rgba(38,48,84,0.42)] outline-none focus-visible:ring-4 focus-visible:ring-fuchsia-300 sm:mb-6 sm:rounded-[26px] sm:p-7 dark:bg-[#18233b] ${invalid ? "border-rose-400 ring-2 ring-rose-300" : "border-slate-200 dark:border-slate-700"}`}>
+    <section className="survey-card mb-6 rounded-[26px] border border-slate-200 bg-white p-5 shadow-[0_12px_36px_-28px_rgba(38,48,84,0.42)] sm:p-7 dark:border-slate-700 dark:bg-[#18233b]">
       {visual && <div className="survey-visual mb-5">{visual}</div>}
       <div className="flex items-start gap-3">
         {index && <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-fuchsia-100 text-xs font-black text-fuchsia-700 dark:bg-fuchsia-500/20 dark:text-fuchsia-200">{index}</span>}
@@ -68,7 +61,7 @@ export default function RatingPoll({
       </div>
 
       <div className="mt-5 grid grid-cols-5 gap-1.5 sm:gap-2" role="group" aria-label={title}>
-        {orderedScale.map(({ n, emoji, label }) => {
+        {SCALE.map(({ n, emoji, label }) => {
           const selected = value === n;
           const percent = stats?.percentages?.[String(n)] ?? 0;
           const count = stats?.counts?.[String(n)] ?? 0;
@@ -76,12 +69,11 @@ export default function RatingPoll({
             <button
               key={n}
               type="button"
-              data-rating-value={n}
               title={label}
               aria-label={`Rating ${n} of 5: ${label}`}
               aria-pressed={selected}
               onClick={() => select(n)}
-              className={`flex min-h-[70px] min-w-0 touch-manipulation flex-col items-center justify-center gap-0.5 rounded-xl border-2 px-0.5 py-2 text-sm font-bold transition-all focus-visible:ring-4 focus-visible:ring-fuchsia-300 sm:min-h-[86px] sm:rounded-2xl sm:px-1 ${selected
+              className={`flex min-h-[74px] flex-col items-center justify-center gap-0.5 rounded-2xl border-[1.5px] px-1 py-2 text-sm font-bold transition-all sm:min-h-[86px] ${selected
                 ? "border-fuchsia-500 bg-fuchsia-50 text-fuchsia-800 ring-[3px] ring-fuchsia-500/10 dark:border-fuchsia-400 dark:bg-fuchsia-500/15 dark:text-fuchsia-100"
                 : "border-slate-200 bg-white text-slate-700 hover:border-fuchsia-300 dark:border-slate-600 dark:bg-[#1e2c47] dark:text-slate-200 dark:hover:border-fuchsia-400"}`}
             >
@@ -105,7 +97,7 @@ export default function RatingPoll({
             <span>{stats.total} submitted response{stats.total === 1 ? "" : "s"}</span>
           </div>
           <div className="mt-3 space-y-2.5">
-            {orderedScale.map(({ n }) => {
+            {SCALE.map(({ n }) => {
               const percent = stats.percentages?.[String(n)] ?? 0;
               const count = stats.counts?.[String(n)] ?? 0;
               return (

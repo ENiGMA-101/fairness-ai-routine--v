@@ -2,14 +2,15 @@ import assert from "node:assert/strict";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { DistributionCard, RatingCard } from "@/components/ResultCards";
-import { countValidVotes, leadingValues } from "@/lib/poll-analytics";
+import {
+  countValidVotes,
+  leadingValues,
+  sortOptionsByLivePercentage,
+} from "@/lib/poll-analytics";
 import {
   FORM1_QUESTIONS,
-  SEMESTERS,
   STUDENT_QUESTION_IDS,
   TEACHER_QUESTION_IDS,
-  shuffleSessionValues,
-  shuffleSurveyOptions,
   shuffleSurveyQuestions,
 } from "@/lib/survey";
 
@@ -66,8 +67,9 @@ console.log("PASS 50% / 50%: both highlighted as tied; 0-vote option is 0% with 
 
 const three = distribution({ A: 20, B: 30, C: 50 });
 assert.deepEqual(three.stats.percentages, { A: 20, B: 30, C: 50 });
+assert.deepEqual(sortOptionsByLivePercentage(options, three.stats).map(({ value }) => value), ["C", "B", "A"]);
 assert.deepEqual(options.map(({ value }) => value), ["A", "B", "C"]);
-console.log("PASS 20/30/50: question-specific percentages; canonical option order unchanged");
+console.log("PASS 20/30/50: correct percentages and survey-only sorting; canonical order unchanged");
 
 const questionOne = countValidVotes(["A", "A", "B", null, "", "invalid", undefined], ["A", "B", "C"]);
 const questionTwo = countValidVotes(["Y", "Y", null, "invalid"], ["X", "Y"]);
@@ -75,9 +77,10 @@ assert.equal(questionOne.total, 3);
 assert.deepEqual(questionOne.percentages, { A: 67, B: 33, C: 0 });
 assert.equal(questionTwo.total, 2);
 assert.deepEqual(questionTwo.percentages, { X: 0, Y: 100 });
+assert.deepEqual(sortOptionsByLivePercentage(options, null).map(({ value }) => value), ["A", "B", "C"]);
 const stableTie = distribution({ A: 2, B: 6, C: 2 });
-assert.deepEqual(leadingValues(stableTie.rows).map(({ value }) => value), ["B"]);
-console.log("PASS per-question denominator excludes missing/invalid/unsubmitted answers; leaders use counts");
+assert.deepEqual(sortOptionsByLivePercentage(options, stableTie.stats).map(({ value }) => value), ["B", "A", "C"]);
+console.log("PASS per-question denominator excludes missing/invalid/unsubmitted answers; ties sort stably");
 
 const canonicalIds = FORM1_QUESTIONS.map(({ id }) => id);
 const shuffledA = shuffleSurveyQuestions(FORM1_QUESTIONS, () => 0);
@@ -95,19 +98,6 @@ for (const ordered of [shuffledA, shuffledB]) {
 assert.notDeepEqual(shuffledA.map(({ id }) => id), shuffledB.map(({ id }) => id));
 assert.deepEqual(FORM1_QUESTIONS.map(({ id }) => id), canonicalIds);
 console.log("PASS question shuffling: pinned profile/semester; Student and Teacher groups isolated");
-
-const firstOrders = shuffleSurveyOptions(FORM1_QUESTIONS, {}, () => 0);
-const previousOrders = Object.fromEntries(Object.entries(firstOrders).map(([id, choices]) => [id, choices.map(({ value }) => value)]));
-const secondOrders = shuffleSurveyOptions(FORM1_QUESTIONS, previousOrders, () => 0);
-assert.deepEqual(firstOrders.semester.map(({ value }) => value), SEMESTERS);
-assert.deepEqual(secondOrders.semester.map(({ value }) => value), SEMESTERS);
-assert.deepEqual(firstOrders.role.map(({ value }) => value), ["Student", "Teacher"]);
-for (const question of FORM1_QUESTIONS.filter(({ id }) => !["role", "department", "semester"].includes(id))) {
-  assert.notDeepEqual(firstOrders[question.id].map(({ value }) => value), secondOrders[question.id].map(({ value }) => value));
-  assert.deepEqual(new Set(firstOrders[question.id].map(({ value }) => value)), new Set(question.options.map(({ value }) => value)));
-}
-assert.deepEqual(shuffleSessionValues([1, 2, 3, 4, 5], [5, 4, 3, 2, 1], () => 0).sort(), [1, 2, 3, 4, 5]);
-console.log("PASS randomized answer options; semester stays 1.1 → 4.2; stored values remain identical");
 
 const ratingHTML = renderToStaticMarkup(createElement(RatingCard, {
   summary: {

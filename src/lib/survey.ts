@@ -273,68 +273,20 @@ export const FORM1_ALLOWED_VALUES: Record<string, readonly string[]> = Object.fr
 export function shuffleSurveyQuestions(
   questions: readonly QuestionDef[],
   random: () => number = Math.random,
-  previous: Partial<Record<"Student" | "Teacher", readonly string[]>> = {},
 ): QuestionDef[] {
   const pinned = questions.filter(({ id }) => id === "role" || id === "department" || id === "semester");
   const student = questions.filter(({ audience, id }) => audience === "Student" && id !== "semester");
   const teacher = questions.filter(({ audience }) => audience === "Teacher");
   const shared = questions.filter(({ audience, id }) => audience === "Both" && id !== "role" && id !== "department");
-  const shuffle = (items: QuestionDef[], last?: readonly string[]) => {
+  const shuffle = (items: QuestionDef[]) => {
     const copy = [...items];
     for (let i = copy.length - 1; i > 0; i -= 1) {
       const j = Math.floor(random() * (i + 1));
       [copy[i], copy[j]] = [copy[j], copy[i]];
     }
-    if (copy.length > 1 && last?.length === copy.length && last.every((id, i) => id === copy[i].id)) {
-      copy.push(copy.shift()!);
-    }
     return copy;
   };
-  return [...pinned, ...shuffle(student, previous.Student), ...shuffle(teacher, previous.Teacher), ...shuffle(shared)];
-}
-
-/**
- * Survey-taking display only. Keep profile and semester options canonical;
- * shuffle each other question independently. A previous order can be supplied
- * from sessionStorage so two consecutive visits never show the identical order.
- */
-export function shuffleSessionValues<T extends string | number>(
-  choices: readonly T[],
-  previous: readonly T[] = [],
-  random: () => number = Math.random,
-): T[] {
-  const result = [...choices];
-  for (let i = result.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(random() * (i + 1));
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  if (result.length > 1 && previous.length === result.length && previous.every((value, i) => value === result[i])) {
-    result.push(result.shift()!);
-  }
-  return result;
-}
-
-export function shuffleSurveyOptions(
-  questions: readonly QuestionDef[],
-  previous: Readonly<Record<string, readonly string[]>> = {},
-  random: () => number = Math.random,
-): Record<string, Option[]> {
-  const result: Record<string, Option[]> = {};
-  for (const question of questions) {
-    const copy = [...question.options];
-    if (question.id !== "role" && question.id !== "department" && question.id !== "semester") {
-      for (let i = copy.length - 1; i > 0; i -= 1) {
-        const j = Math.floor(random() * (i + 1));
-        [copy[i], copy[j]] = [copy[j], copy[i]];
-      }
-      const old = previous[question.id];
-      if (copy.length > 1 && old?.length === copy.length && old.every((id, i) => id === copy[i].value)) {
-        copy.push(copy.shift()!);
-      }
-    }
-    result[question.id] = copy;
-  }
-  return result;
+  return [...pinned, ...shuffle(student), ...shuffle(teacher), ...shuffle(shared)];
 }
 
 export type SlotDef = { id: string; label: string; range: string };
