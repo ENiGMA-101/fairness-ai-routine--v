@@ -113,18 +113,14 @@ try {
   const teacherIds = await cardIds();
   assert.deepEqual([...teacherIds].sort(), [...TEACHER_FORM1].sort(), "teacher branch contains only teacher questions, no mixing");
   assert(!teacherIds.includes("semester"), "semester question is student-only");
-  // Shuffle check: reload and confirm the post-semester order varies across entries.
-  const seenOrders = new Set();
+  // Finalized source order must stay identical across refreshes and draft restores.
   for (let attempt = 0; attempt < 4; attempt += 1) {
     await page.goto(`${baseURL}/form1`, { waitUntil: "load" });
     await page.getByRole("button", { name: "Student", exact: true }).click();
     await page.locator("#question-semester").waitFor({ state: "visible" });
-    const ids = await cardIds();
-    assert.equal(ids[0], "semester", "semester fixed first on every entry");
-    seenOrders.add(ids.slice(1).join(","));
+    assert.deepEqual(await cardIds(), STUDENT_FORM1, "finalized Student order stays fixed on every entry");
   }
-  assert(seenOrders.size >= 2, `opinion questions shuffle on entry (saw ${seenOrders.size} distinct orders)`);
-  console.log("PASS Form 1 shuffle: semester fixed, opinion order varies per entry");
+  console.log("PASS Form 1 canonical order: semester and all opinion questions stay fixed");
   await page.goto(`${baseURL}/form1`, { waitUntil: "load" });
   await page.getByRole("button", { name: "Teacher", exact: true }).click();
   await page.locator(`#question-${teacherIds[0]}`).waitFor({ state: "visible" });

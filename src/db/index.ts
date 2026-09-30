@@ -1,4 +1,5 @@
 import { drizzle } from "drizzle-orm/node-postgres";
+import { sql } from "drizzle-orm";
 import { Pool } from "pg";
 
 type Db = ReturnType<typeof drizzle>;
@@ -228,6 +229,17 @@ DO $$ BEGIN
     ) NOT VALID;
   END IF;
 END $$;
+
+-- Additive live presence: no changes to the finalized response tables.
+CREATE TABLE IF NOT EXISTS survey_presence (
+  session_id text PRIMARY KEY,
+  browser_id text NOT NULL,
+  scope text NOT NULL,
+  last_seen timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT survey_presence_scope_check CHECK (scope IN ('home', 'form1', 'form2'))
+);
+CREATE INDEX IF NOT EXISTS survey_presence_last_seen_idx ON survey_presence (last_seen);
+ALTER TABLE survey_presence ENABLE ROW LEVEL SECURITY;
 `;
 
 /**
@@ -244,8 +256,7 @@ export async function ensureTablesExist(): Promise<void> {
   if (!globalForDb.__tablesInitPromise) {
     globalForDb.__tablesInitPromise = (async () => {
       try {
-        const poolInstance = getPool();
-        await poolInstance.query(DDL_SCHEMA);
+        await getDb().execute(sql.raw(DDL_SCHEMA));
       } catch (err) {
         globalForDb.__tablesInitPromise = undefined;
         markDatabaseBroken(err instanceof Error ? err.message : String(err));

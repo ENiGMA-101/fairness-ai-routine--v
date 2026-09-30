@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { check, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { SURVEY_VERSION } from "@/lib/survey";
 
 /** Form 1 — exact Student & Teacher Google Forms survey (versioned). */
@@ -121,6 +121,21 @@ export const form2Responses = pgTable(
     ),
   ],
 );
+
+/** Presence is intentionally separate from official responses and contains no answers. */
+export const surveyPresence = pgTable(
+  "survey_presence",
+  {
+    sessionId: text("session_id").primaryKey(),
+    browserId: text("browser_id").notNull(),
+    scope: text("scope").notNull(),
+    lastSeen: timestamp("last_seen", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    check("survey_presence_scope_check", sql`${table.scope} in ('home', 'form1', 'form2')`),
+    index("survey_presence_last_seen_idx").on(table.lastSeen),
+  ],
+).enableRLS();
 
 export type Form1Row = typeof form1Responses.$inferSelect;
 export type Form2Row = typeof form2Responses.$inferSelect;

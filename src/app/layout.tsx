@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import ThemeToggle from "@/components/ThemeToggle";
+import ParticipationProvider from "@/components/ParticipationProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -9,15 +10,16 @@ export const metadata: Metadata = {
     "Help shape fairer university class schedules. Share anonymous student or teacher preferences and rate time slots for fairness-aware AI research.",
 };
 
-// This runs before React hydrates, preventing a bright flash when dark mode is saved.
-const themeScript = `try{const saved=localStorage.getItem('fairness-theme');const dark=saved==='dark'||(saved!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',dark);document.documentElement.style.colorScheme=dark?'dark':'light'}catch(e){}`;
+// Keep the requested dark theme on first visit and respect every saved choice.
+// Runs before hydration so light/dark preferences never cause a bright flash.
+const themeScript = `try{const saved=localStorage.getItem('fairness-theme');const dark=saved!=='light';document.documentElement.classList.toggle('dark',dark);document.documentElement.style.colorScheme=dark?'dark':'light'}catch(e){}`;
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="bn" suppressHydrationWarning>
+    <html lang="bn" className="dark" suppressHydrationWarning>
       <head><script dangerouslySetInnerHTML={{ __html: themeScript }} /></head>
       <body className="min-h-screen antialiased">
-        {children}
+        <ParticipationProvider>{children}</ParticipationProvider>
         <ThemeToggle />
       </body>
     </html>

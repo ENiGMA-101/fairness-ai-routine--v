@@ -134,17 +134,13 @@ export async function POST(req: NextRequest) {
       invalidateForm1Caches();
       return NextResponse.json({ ok: true, id: inserted[0].id });
     } catch (error) {
-      console.warn("PostgreSQL insert failed, using preview fallback:", error);
+      console.error("PostgreSQL submission failed; keeping the browser draft:", error);
       markDatabaseBroken(error instanceof Error ? error.message : String(error));
+      return NextResponse.json({ error: "Your response was not confirmed. Your local draft is safe; please retry." }, { status: 503 });
     }
   }
 
-  const localResult = addForm1Response(storagePayload);
-  if (!localResult.ok && localResult.duplicate) {
-    return NextResponse.json({ error: "duplicate", duplicate: true }, { status: 409 });
-  }
-  invalidateForm1Caches();
-  return NextResponse.json({ ok: true, id: localResult.id, storage: "preview_fallback" });
+  return NextResponse.json({ error: "A database connection is required to record your response. Your local draft is safe." }, { status: 503 });
 }
 
 function invalidateForm1Caches() {

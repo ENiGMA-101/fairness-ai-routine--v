@@ -106,25 +106,11 @@ export async function POST(req: NextRequest) {
       invalidate("home-stats");
       return NextResponse.json({ ok: true, id: inserted[0].id, storage: "database" });
     } catch (pgError) {
-      console.warn("PostgreSQL insert failed, using fallback storage:", pgError);
+      console.error("PostgreSQL submission failed; keeping the browser draft:", pgError);
       markDatabaseBroken(pgError instanceof Error ? pgError.message : String(pgError));
-      // Seamlessly fall through to local fallback storage!
+      return NextResponse.json({ error: "Your response was not confirmed. Your local draft is safe; please retry." }, { status: 503 });
     }
   }
 
-  // Fallback storage (works with ZERO database configured!)
-  const localResult = addForm2Response(storagePayload);
-  if (!localResult.ok && localResult.duplicate) {
-    return NextResponse.json({ error: "duplicate", duplicate: true }, { status: 409 });
-  }
-  invalidate("poll-stats-form2");
-  invalidate("form2-results");
-  invalidate("home-stats");
-
-  return NextResponse.json({
-    ok: true,
-    id: localResult.id,
-    storage: "local_fallback",
-    note: "Stored successfully without requiring an external database.",
-  });
+  return NextResponse.json({ error: "A database connection is required to record your response. Your local draft is safe." }, { status: 503 });
 }

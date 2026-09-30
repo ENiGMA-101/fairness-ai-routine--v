@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import PollStatsWarmup from "@/components/PollStatsWarmup";
 import ResponseCounters from "@/components/ResponseCounters";
+import LiveParticipationCard from "@/components/LiveParticipationCard";
 
 // Static HTML keeps the landing page fast. Aggregate data loads separately.
 export const revalidate = 300;
@@ -109,6 +110,8 @@ export default function Home() {
             <span><CheckCircle2 size={15} /> One response per browser</span>
             <span><BarChart3 size={15} /> Results after your selection</span>
           </div>
+
+          <LiveParticipationCard />
         </section>
 
         <section id="about" className="research-container research-about" aria-labelledby="about-heading">

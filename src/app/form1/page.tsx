@@ -17,57 +17,49 @@ import PollCard from "@/components/PollCard";
 import HomeButton from "@/components/HomeButton";
 import { FORM1_VISUALS } from "@/components/Visuals";
 import { useSurveyPollStats } from "@/lib/poll-stats-client";
-import { getBrowserId, isSubmitted, markSubmitted } from "@/lib/browser";
+import { clearDraft, getBrowserId, isSubmitted, markSubmitted } from "@/lib/browser";
+import DraftNotice from "@/components/DraftNotice";
+import { EMPTY_FORM1_DRAFT, restoreForm1Draft, useLocalSurveyDraft } from "@/lib/local-draft";
 import {
   DEPARTMENT_OPTIONS,
   FORM1_QUESTIONS,
   ROLE_OPTIONS,
   STUDENT_SECTION_INTRO,
   TEACHER_SECTION_INTRO,
-  shuffleArray,
 } from "@/lib/survey";
 const QUESTIONS = FORM1_QUESTIONS.filter((q) => q.id !== "role" && q.id !== "department");
 
 export default function Form1Page() {
-  const [role, setRole] = useState("");
-  const [department, setDepartment] = useState("");
-  const [departmentOther, setDepartmentOther] = useState("");
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const localDraft = useLocalSurveyDraft("form1", EMPTY_FORM1_DRAFT, restoreForm1Draft);
+  const { role, department, departmentOther, answers } = localDraft.draft;
+  const setRole = (value: string) => localDraft.update("role", value);
+  const setDepartment = (value: string) => localDraft.update("department", value);
+  const setDepartmentOther = (value: string) => localDraft.update("departmentOther", value);
+  const setAnswers = (value: Record<string, string> | ((previous: Record<string, string>) => Record<string, string>)) => localDraft.update("answers", value);
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const { stats: batchStats, status: statsStatus } = useSurveyPollStats("form1");
-  // Distinguishes "just submitted" from "already submitted earlier on this browser"
+  // Distinguishes a newly acknowledged submission from an earlier submission.
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
 
   useEffect(() => {
-    if (isSubmitted("form1")) {
-      setSubmitted(true);
-      setAlreadySubmitted(true);
-    }
+    const syncSubmission = () => {
+      if (isSubmitted("form1")) {
+        clearDraft("form1");
+        setSubmitted(true);
+        setAlreadySubmitted(true);
+      }
+    };
+    syncSubmission();
+    window.addEventListener("storage", syncSubmission);
+    return () => window.removeEventListener("storage", syncSubmission);
   }, []);
 
-  // Shuffle on entry (client side). role & department are fixed sections above;
-  // semester stays fixed and first; the remaining role-applicable questions are
-  // shuffled every time the survey is entered. Student and Teacher questions
-  // never mix because only questions matching the selected role are included.
-  const [orderedIds, setOrderedIds] = useState<string[]>([]);
-  useEffect(() => {
-    if (!role) {
-      setOrderedIds([]);
-      return;
-    }
-    const applicable = QUESTIONS.filter(
-      (question) => question.audience === role || question.audience === "Both",
-    );
-    const semester = applicable.filter((question) => question.id === "semester");
-    const rest = applicable.filter((question) => question.id !== "semester");
-    setOrderedIds([...semester, ...shuffleArray(rest)].map((question) => question.id));
-  }, [role]);
-
+  // The finalized canonical order is stable across refreshes and draft restores.
   const visible = useMemo(
-    () => orderedIds.map((id) => QUESTIONS.find((question) => question.id === id)!),
-    [orderedIds],
+    () => QUESTIONS.filter((question) => question.audience === role || question.audience === "Both"),
+    [role],
   );
 
   const total = useMemo(() => (role ? visible.length + 2 : 2), [role, visible.length]);
@@ -91,7 +83,7 @@ export default function Form1Page() {
     setAnswers((prev) => ({ ...prev, [id]: value }));
 
   const submit = async () => {
-    if (!canSubmit || loading) return;
+    if (!localDraft.ready || !canSubmit || loading || submitted || isSubmitted("form1")) return;
     setLoading(true);
     setError("");
 
@@ -263,6 +255,8 @@ export default function Form1Page() {
           </div>
         </div>
 
+        <DraftNotice ready={localDraft.ready} hasDraft={localDraft.hasDraft} restored={localDraft.restored} storageAvailable={localDraft.storageAvailable} />
+
         {/* Common profile questions — same wording and order as Google Forms */}
         <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
           <h3 className="text-[17px] font-bold text-zinc-900">Are you a Student or Teacher? *</h3>
@@ -273,6 +267,7 @@ export default function Form1Page() {
                 <button
                   key={option.value}
                   type="button"
+                  aria-pressed={selected}
                   onClick={() => setRole(option.value)}
                   className={`flex flex-col items-center justify-center rounded-2xl border-2 p-5 transition-all ${selected
                     ? "border-violet-600 bg-violet-50/70 shadow-md ring-2 ring-violet-500/20"
@@ -297,6 +292,7 @@ export default function Form1Page() {
                 <button
                   key={option.value}
                   type="button"
+                  aria-pressed={selected}
                   onClick={() => setDepartment(option.value)}
                   className={`flex items-center gap-2 rounded-2xl border-2 px-4 py-3 text-left transition-all ${selected
                     ? "border-violet-600 bg-violet-50/70 font-bold text-violet-950 shadow-sm"
@@ -383,7 +379,7 @@ export default function Form1Page() {
           <button
             type="button"
             onClick={submit}
-            disabled={!canSubmit || loading}
+            disabled={!localDraft.ready || !canSubmit || loading || submitted}
             className="w-full rounded-[24px] bg-black py-5 text-lg font-black text-white shadow-xl transition-all hover:bg-zinc-800 disabled:opacity-40 disabled:hover:bg-black"
           >
             {loading ? "Submitting Response…" : `Submit Response (${answered}/${total})`}

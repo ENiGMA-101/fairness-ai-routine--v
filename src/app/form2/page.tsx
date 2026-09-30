@@ -18,7 +18,9 @@ import TimeSlotMatrix from "@/components/TimeSlotMatrix";
 import HomeButton from "@/components/HomeButton";
 import { useSurveyPollStats } from "@/lib/poll-stats-client";
 import { VisualFairness, VisualLongGapForm2 } from "@/components/Visuals";
-import { getBrowserId, isSubmitted, markSubmitted } from "@/lib/browser";
+import { clearDraft, getBrowserId, isSubmitted, markSubmitted } from "@/lib/browser";
+import DraftNotice from "@/components/DraftNotice";
+import { EMPTY_FORM2_DRAFT, restoreForm2Draft, useLocalSurveyDraft } from "@/lib/local-draft";
 import {
   DEPARTMENTS,
   FORM2_COPY,
@@ -31,13 +33,15 @@ type RatingQId = "long_gap_rating" | "fairness_rating";
 const RATING_QUESTION_IDS: RatingQId[] = ["long_gap_rating", "fairness_rating"];
 
 export default function Form2Page() {
-  const [role, setRole] = useState("");
-  const [department, setDepartment] = useState("");
-  const [departmentOther, setDepartmentOther] = useState("");
-  const [timeSlots, setTimeSlots] = useState<Record<string, number>>({});
-  const [longGap, setLongGap] = useState<number | null>(null);
-  const [fairness, setFairness] = useState<number | null>(null);
-  const [feedback, setFeedback] = useState("");
+  const localDraft = useLocalSurveyDraft("form2", EMPTY_FORM2_DRAFT, restoreForm2Draft);
+  const { role, department, departmentOther, timeSlots, longGap, fairness, feedback } = localDraft.draft;
+  const setRole = (value: string) => localDraft.update("role", value);
+  const setDepartment = (value: string) => localDraft.update("department", value);
+  const setDepartmentOther = (value: string) => localDraft.update("departmentOther", value);
+  const setTimeSlots = (value: Record<string, number> | ((previous: Record<string, number>) => Record<string, number>)) => localDraft.update("timeSlots", value);
+  const setLongGap = (value: number | null) => localDraft.update("longGap", value);
+  const setFairness = (value: number | null) => localDraft.update("fairness", value);
+  const setFeedback = (value: string) => localDraft.update("feedback", value);
   const [submitted, setSubmitted] = useState(false);
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -45,10 +49,16 @@ export default function Form2Page() {
   const { stats: batchStats, status: statsStatus } = useSurveyPollStats("form2");
 
   useEffect(() => {
-    if (isSubmitted("form2")) {
-      setSubmitted(true);
-      setAlreadySubmitted(true);
-    }
+    const syncSubmission = () => {
+      if (isSubmitted("form2")) {
+        clearDraft("form2");
+        setSubmitted(true);
+        setAlreadySubmitted(true);
+      }
+    };
+    syncSubmission();
+    window.addEventListener("storage", syncSubmission);
+    return () => window.removeEventListener("storage", syncSubmission);
   }, []);
 
   // Keep questions in exact Google Forms serial order: matrix, long gaps, fairness, feedback.
@@ -75,7 +85,7 @@ export default function Form2Page() {
     (department !== "Other" || departmentOther.trim().length > 0);
 
   const submit = async () => {
-    if (!canSubmit || loading) return;
+    if (!localDraft.ready || !canSubmit || loading || submitted || isSubmitted("form2")) return;
     setLoading(true);
     setError("");
 
@@ -251,6 +261,8 @@ export default function Form2Page() {
           </div>
         </div>
 
+        <DraftNotice ready={localDraft.ready} hasDraft={localDraft.hasDraft} restored={localDraft.restored} storageAvailable={localDraft.storageAvailable} />
+
         {/* Profile questions — same wording and order as Google Forms */}
         <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
           <h3 className="text-[17px] font-bold text-zinc-900">Are you a Student or Teacher? *</h3>
@@ -261,6 +273,7 @@ export default function Form2Page() {
                 <button
                   key={option.value}
                   type="button"
+                  aria-pressed={selected}
                   onClick={() => setRole(option.value)}
                   className={`flex items-center gap-3 rounded-2xl border-2 p-4 transition-all ${selected
                     ? "border-violet-600 bg-violet-50/70 font-bold text-violet-950 shadow-md ring-2 ring-violet-500/20"
@@ -285,6 +298,7 @@ export default function Form2Page() {
                 <button
                   key={option.value}
                   type="button"
+                  aria-pressed={selected}
                   onClick={() => setDepartment(option.value)}
                   className={`flex items-center gap-2 rounded-2xl border-2 px-4 py-3 text-left transition-all ${selected
                     ? "border-violet-600 bg-violet-50/70 font-bold text-violet-950 shadow-sm"
@@ -314,7 +328,7 @@ export default function Form2Page() {
           statsStatus={statsStatus}
         />
 
-        {/* Questions 2 and 3 — opinion ratings, shuffled on entry */}
+        {/* Questions 2 and 3 — finalized opinion ratings in source order */}
         {ratingOrder.map((qid, idx) => {
           const isLongGap = qid === "long_gap_rating";
           return (
@@ -364,7 +378,7 @@ export default function Form2Page() {
           <button
             type="button"
             onClick={submit}
-            disabled={!canSubmit || loading}
+            disabled={!localDraft.ready || !canSubmit || loading || submitted}
             className="w-full rounded-[24px] bg-black py-5 text-lg font-black text-white shadow-xl transition-all hover:bg-zinc-800 disabled:opacity-40 disabled:hover:bg-black"
           >
             {loading ? "Submitting Ratings…" : `Submit Ratings (${answered}/${total})`}

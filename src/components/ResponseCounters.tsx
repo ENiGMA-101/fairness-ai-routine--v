@@ -1,27 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import { ArrowUpRight, BarChart3, UsersRound, Clock3 } from "lucide-react";
+import { useParticipation } from "@/components/ParticipationProvider";
 
-type Counts = { form1: number; form2: number };
-
-/** Live counters hydrate separately so they never slow navigation to Home. */
+/** Original counters now share the automatic database-only refresh loop. */
 export default function ResponseCounters() {
-  const [counts, setCounts] = useState<Counts | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    void fetch("/api/counters", { cache: "no-store" })
-      .then((response) => response.ok ? response.json() : null)
-      .then((data) => {
-        if (active && data && typeof data === "object") {
-          setCounts({ form1: Number(data.form1) || 0, form2: Number(data.form2) || 0 });
-        }
-      })
-      .catch(() => {});
-    return () => { active = false; };
-  }, []);
+  const { snapshot } = useParticipation();
+  const counts = snapshot?.submitted;
 
   const number = (value: number | undefined) =>
     value === undefined
