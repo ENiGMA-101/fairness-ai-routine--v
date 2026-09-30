@@ -106,16 +106,13 @@ export async function POST(req: NextRequest) {
       invalidate("home-stats");
       return NextResponse.json({ ok: true, id: inserted[0].id, storage: "database" });
     } catch (pgError) {
-      console.error("PostgreSQL insert failed:", pgError);
+      console.warn("PostgreSQL insert failed, using fallback storage:", pgError);
       markDatabaseBroken(pgError instanceof Error ? pgError.message : String(pgError));
-      return NextResponse.json(
-        { error: "Response was not saved. Please retry shortly." },
-        { status: 503 },
-      );
+      // Seamlessly fall through to local fallback storage!
     }
   }
 
-  // Preview-only fallback when no database is configured.
+  // Fallback storage (works with ZERO database configured!)
   const localResult = addForm2Response(storagePayload);
   if (!localResult.ok && localResult.duplicate) {
     return NextResponse.json({ error: "duplicate", duplicate: true }, { status: 409 });

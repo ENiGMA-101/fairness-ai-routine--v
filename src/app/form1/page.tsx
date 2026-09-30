@@ -24,7 +24,7 @@ import {
   ROLE_OPTIONS,
   STUDENT_SECTION_INTRO,
   TEACHER_SECTION_INTRO,
-  shuffleSurveyQuestions,
+  shuffleArray,
 } from "@/lib/survey";
 const QUESTIONS = FORM1_QUESTIONS.filter((q) => q.id !== "role" && q.id !== "department");
 
@@ -47,19 +47,27 @@ export default function Form1Page() {
     }
   }, []);
 
-  // Shuffle only the display order on each client visit. Semester stays first;
-  // Student and Teacher questions never enter each other's section.
-  const [displayQuestions, setDisplayQuestions] = useState(() => [...QUESTIONS]);
+  // Shuffle on entry (client side). role & department are fixed sections above;
+  // semester stays fixed and first; the remaining role-applicable questions are
+  // shuffled every time the survey is entered. Student and Teacher questions
+  // never mix because only questions matching the selected role are included.
+  const [orderedIds, setOrderedIds] = useState<string[]>([]);
   useEffect(() => {
-    setDisplayQuestions(shuffleSurveyQuestions(QUESTIONS));
-  }, []);
+    if (!role) {
+      setOrderedIds([]);
+      return;
+    }
+    const applicable = QUESTIONS.filter(
+      (question) => question.audience === role || question.audience === "Both",
+    );
+    const semester = applicable.filter((question) => question.id === "semester");
+    const rest = applicable.filter((question) => question.id !== "semester");
+    setOrderedIds([...semester, ...shuffleArray(rest)].map((question) => question.id));
+  }, [role]);
 
   const visible = useMemo(
-    () =>
-      displayQuestions.filter((question) =>
-        role === "" ? false : question.audience === role || question.audience === "Both",
-      ),
-    [role, displayQuestions],
+    () => orderedIds.map((id) => QUESTIONS.find((question) => question.id === id)!),
+    [orderedIds],
   );
 
   const total = useMemo(() => (role ? visible.length + 2 : 2), [role, visible.length]);
@@ -295,7 +303,7 @@ export default function Form1Page() {
                     : "border-zinc-200 bg-white font-medium text-zinc-700 hover:border-violet-300 hover:bg-zinc-50"}`}
                 >
                   <Building2 className={`h-4 w-4 ${selected ? "text-violet-600" : "text-zinc-400"}`} />
-                  <span className="text-sm">{option.label}</span>
+                  <span className="min-w-0 flex-1 text-sm">{option.label}</span>
                 </button>
               );
             })}

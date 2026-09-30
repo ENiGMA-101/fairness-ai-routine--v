@@ -3,14 +3,15 @@ import HomeButton from "@/components/HomeButton";
 import RefreshButton from "@/components/RefreshButton";
 import { DistributionCard, StatTile } from "@/components/ResultCards";
 import { getForm1Results, type Form1Results } from "@/lib/results";
+import { cachedValue } from "@/lib/stats-cache";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 30;
 
 export default async function Form1ResultsPage() {
   let data: Form1Results | null = null;
   let error = "";
   try {
-    data = await getForm1Results();
+    data = await cachedValue("form1-results", 30_000, getForm1Results);
   } catch (e) {
     error = e instanceof Error ? e.message : "Failed to load results";
   }

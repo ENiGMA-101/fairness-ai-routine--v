@@ -27,11 +27,12 @@ function SlotIcon({ id }: { id: string }) {
 }
 
 export default function TimeSlotMatrix({ values, onChange, initialStats, statsStatus = "loading" }: Props) {
+  // Each time-slot row reveals ONLY its own results after the user rates that row.
   const [clickedSlots, setClickedSlots] = useState<Record<string, boolean>>({});
   const ratedCount = TIME_SLOTS.filter(({ id }) => values[id] !== undefined).length;
 
   function select(id: string, rating: number) {
-    onChange(id, rating); // UI updates immediately; the database is read once for the entire form
+    onChange(id, rating); // UI updates immediately; only Submit records a response
     setClickedSlots((previous) => ({ ...previous, [id]: true }));
   }
 
@@ -59,7 +60,7 @@ export default function TimeSlotMatrix({ values, onChange, initialStats, statsSt
           const stats = initialStats?.[slot.id] ?? null;
           const showAll = !!clickedSlots[slot.id] && stats !== null;
           return (
-            <div key={slot.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 sm:p-4 dark:border-slate-600 dark:bg-[#1e2c47]">
+            <div key={slot.id} data-time-slot={slot.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 sm:p-4 dark:border-slate-600 dark:bg-[#1e2c47]">
               <div className="flex items-center gap-2.5">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm dark:bg-slate-700"><SlotIcon id={slot.id} /></span>
                 <div className="flex-1">
@@ -79,6 +80,7 @@ export default function TimeSlotMatrix({ values, onChange, initialStats, statsSt
                       type="button"
                       aria-label={`${slot.label}: ${n} of 5 — ${label}`}
                       aria-pressed={selected}
+                      data-rating-result={showAll ? n : undefined}
                       onClick={() => select(slot.id, n)}
                       className={`flex min-h-[60px] flex-col items-center justify-center rounded-xl border-[1.5px] px-1 py-1.5 text-xs font-bold transition-colors ${selected
                         ? "border-sky-500 bg-sky-100 text-sky-900 dark:border-sky-400 dark:bg-sky-400/20 dark:text-sky-100"

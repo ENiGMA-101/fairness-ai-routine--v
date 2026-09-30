@@ -27,6 +27,9 @@ import {
   TIME_SLOTS,
 } from "@/lib/survey";
 
+type RatingQId = "long_gap_rating" | "fairness_rating";
+const RATING_QUESTION_IDS: RatingQId[] = ["long_gap_rating", "fairness_rating"];
+
 export default function Form2Page() {
   const [role, setRole] = useState("");
   const [department, setDepartment] = useState("");
@@ -47,6 +50,9 @@ export default function Form2Page() {
       setAlreadySubmitted(true);
     }
   }, []);
+
+  // Keep questions in exact Google Forms serial order: matrix, long gaps, fairness, feedback.
+  const ratingOrder = RATING_QUESTION_IDS;
 
   const total = 11;
   const answered = useMemo(() => {
@@ -263,7 +269,7 @@ export default function Form2Page() {
                   <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${selected ? "bg-violet-600 text-white" : "bg-zinc-100 text-zinc-500"}`}>
                     {option.value === "Student" ? <GraduationCap className="h-5 w-5" /> : <Briefcase className="h-5 w-5" />}
                   </span>
-                  <span className="text-sm font-bold">{option.label}</span>
+                  <span className="min-w-0 flex-1 text-left text-sm font-bold">{option.label}</span>
                 </button>
               );
             })}
@@ -285,7 +291,7 @@ export default function Form2Page() {
                     : "border-zinc-200 bg-white font-medium text-zinc-700 hover:border-violet-300 hover:bg-zinc-50"}`}
                 >
                   <Building2 className={`h-4 w-4 ${selected ? "text-violet-600" : "text-zinc-400"}`} />
-                  <span className="text-sm">{option.label}</span>
+                  <span className="min-w-0 flex-1 text-sm">{option.label}</span>
                 </button>
               );
             })}
@@ -308,36 +314,27 @@ export default function Form2Page() {
           statsStatus={statsStatus}
         />
 
-        {/* Questions 2 and 3 — fixed Google Forms order */}
-        <RatingPoll
-          form="form2"
-          questionId="long_gap_rating"
-          index={2}
-          initialStats={batchStats}
-          statsStatus={statsStatus}
-          title={`${FORM2_COPY.longGapTitle} *`}
-          titleBn={FORM2_COPY.longGapBn}
-          leftLabel={FORM2_COPY.longGapLeft}
-          rightLabel={FORM2_COPY.longGapRight}
-          value={longGap}
-          onChange={setLongGap}
-          visual={<VisualLongGapForm2 />}
-        />
-
-        <RatingPoll
-          form="form2"
-          questionId="fairness_rating"
-          index={3}
-          initialStats={batchStats}
-          statsStatus={statsStatus}
-          title={`${FORM2_COPY.fairnessTitle} *`}
-          titleBn={FORM2_COPY.fairnessBn}
-          leftLabel={FORM2_COPY.fairnessLeft}
-          rightLabel={FORM2_COPY.fairnessRight}
-          value={fairness}
-          onChange={setFairness}
-          visual={<VisualFairness />}
-        />
+        {/* Questions 2 and 3 — opinion ratings, shuffled on entry */}
+        {ratingOrder.map((qid, idx) => {
+          const isLongGap = qid === "long_gap_rating";
+          return (
+            <RatingPoll
+              key={qid}
+              form="form2"
+              questionId={qid}
+              index={2 + idx}
+              initialStats={batchStats}
+              statsStatus={statsStatus}
+              title={`${isLongGap ? FORM2_COPY.longGapTitle : FORM2_COPY.fairnessTitle} *`}
+              titleBn={isLongGap ? FORM2_COPY.longGapBn : FORM2_COPY.fairnessBn}
+              leftLabel={isLongGap ? FORM2_COPY.longGapLeft : FORM2_COPY.fairnessLeft}
+              rightLabel={isLongGap ? FORM2_COPY.longGapRight : FORM2_COPY.fairnessRight}
+              value={isLongGap ? longGap : fairness}
+              onChange={isLongGap ? setLongGap : setFairness}
+              visual={isLongGap ? <VisualLongGapForm2 /> : <VisualFairness />}
+            />
+          );
+        })}
 
         {/* Question 4: Free-text feedback */}
         <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">

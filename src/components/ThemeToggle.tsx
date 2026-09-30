@@ -1,50 +1,41 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 
-type Theme = "light" | "dark";
 const KEY = "fairness-theme";
 
-export default function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme | null>(null);
-
-  useEffect(() => {
-    const dark = document.documentElement.classList.contains("dark");
-    setTheme(dark ? "dark" : "light");
-    const onStorage = (event: StorageEvent) => {
-      if (event.key !== KEY) return;
-      const next: Theme = event.newValue === "dark" ? "dark" : "light";
-      document.documentElement.classList.toggle("dark", next === "dark");
-      document.documentElement.style.colorScheme = next;
-      setTheme(next);
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
-
-  function toggle() {
-    const next: Theme = document.documentElement.classList.contains("dark") ? "light" : "dark";
-    document.documentElement.classList.toggle("dark", next === "dark");
-    document.documentElement.style.colorScheme = next;
-    window.localStorage.setItem(KEY, next);
-    setTheme(next);
+/**
+ * CSS-driven theme toggle. The saved theme is applied to <html class="dark"> by
+ * the inline script in layout before paint, so this button needs no React state
+ * (no hydration mismatch, no setState-in-effect). It simply flips the class and
+ * persists the choice; every `dark:` variant updates instantly.
+ */
+function toggleTheme() {
+  const root = document.documentElement;
+  const dark = root.classList.toggle("dark");
+  root.style.colorScheme = dark ? "dark" : "light";
+  try {
+    window.localStorage.setItem(KEY, dark ? "dark" : "light");
+  } catch {
+    /* storage unavailable */
   }
+}
 
-  const isDark = theme === "dark";
+export default function ThemeToggle() {
   return (
     <button
       type="button"
-      onClick={toggle}
-      aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
-      aria-pressed={isDark}
-      title={isDark ? "Use light theme" : "Use dark theme"}
+      onClick={toggleTheme}
+      aria-label="Toggle dark mode"
+      title="Toggle dark / light theme"
       className="fixed bottom-5 right-5 z-50 flex items-center gap-2.5 rounded-full border border-slate-200 bg-white/95 px-4 py-3 text-xs font-bold text-slate-800 shadow-[0_14px_42px_-12px_rgba(32,39,80,.4)] backdrop-blur-xl transition-transform hover:-translate-y-0.5 hover:border-violet-400 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-violet-300 dark:border-slate-600 dark:bg-[#1d2b45]/95 dark:text-slate-100 dark:hover:border-violet-400 dark:focus-visible:ring-violet-500/40"
     >
       <span className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-violet-500/20 dark:text-violet-200">
-        {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        <Sun className="h-4 w-4 dark:hidden" aria-hidden="true" />
+        <Moon className="hidden h-4 w-4 dark:block" aria-hidden="true" />
       </span>
-      <span>{isDark ? "Light theme" : "Dark theme"}</span>
+      <span className="dark:hidden">Dark mode</span>
+      <span className="hidden dark:inline">Light mode</span>
     </button>
   );
 }

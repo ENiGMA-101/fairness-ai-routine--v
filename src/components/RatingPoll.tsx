@@ -40,12 +40,14 @@ export default function RatingPoll({
   initialStats,
   statsStatus = "loading",
 }: Props) {
+  // This rating reveals ONLY its own results after the user picks a rating here.
   const [clicked, setClicked] = useState(false);
   const stats: PollStats | null = initialStats?.[questionId] ?? null;
   const showAllResults = clicked && stats !== null;
+  const waiting = clicked && stats === null;
 
   function select(rating: number) {
-    onChange(rating); // instant UI change; no database request here
+    onChange(rating); // instant UI change; only Submit records a response
     setClicked(true);
   }
 
@@ -72,6 +74,7 @@ export default function RatingPoll({
               title={label}
               aria-label={`Rating ${n} of 5: ${label}`}
               aria-pressed={selected}
+              data-rating-result={showAllResults ? n : undefined}
               onClick={() => select(n)}
               className={`flex min-h-[74px] flex-col items-center justify-center gap-0.5 rounded-2xl border-[1.5px] px-1 py-2 text-sm font-bold transition-all sm:min-h-[86px] ${selected
                 ? "border-fuchsia-500 bg-fuchsia-50 text-fuchsia-800 ring-[3px] ring-fuchsia-500/10 dark:border-fuchsia-400 dark:bg-fuchsia-500/15 dark:text-fuchsia-100"
@@ -86,8 +89,8 @@ export default function RatingPoll({
         })}
       </div>
       <div className="mt-3 flex justify-between gap-4 text-[11px] font-medium text-slate-500 dark:text-slate-400 sm:text-xs">
-        <span className="max-w-[48%]">1: {leftLabel}</span>
-        <span className="max-w-[48%] text-right">5: {rightLabel}</span>
+        <span className="max-w-[48%]">{leftLabel}</span>
+        <span className="max-w-[48%] text-right">{rightLabel}</span>
       </div>
 
       {showAllResults ? (
@@ -111,7 +114,7 @@ export default function RatingPoll({
           </div>
           <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">Changing your selection does not add a vote. Your answer counts after Submit.</p>
         </div>
-      ) : clicked ? (
+      ) : waiting ? (
         <p className="mt-4 text-xs text-slate-500 dark:text-slate-400" aria-live="polite">{statsStatus === "error" ? "Results unavailable right now. Your selection is saved on this page." : "Fetching all community ratings… your selection is ready."}</p>
       ) : (
         <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">Choose a rating to reveal all five results.</p>

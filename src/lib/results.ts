@@ -2,7 +2,7 @@ import { desc, eq } from "drizzle-orm";
 import { db, ensureTablesExist, isDatabaseConfigured, markDatabaseBroken } from "@/db";
 import { form1Responses, form2Responses, type Form1Row, type Form2Row } from "@/db/schema";
 import { getAllForm1, getAllForm2, type Form1Record, type Form2Record } from "./storage";
-import { countValidVotes } from "./poll-analytics";
+import { computeLeader, type LeaderInfo } from "./poll-stats";
 import {
   DEPARTMENTS,
   FORM1_QUESTIONS,
@@ -21,6 +21,11 @@ export type Distribution = {
   titleEn?: string;
   total: number;
   rows: DistRow[];
+  /** Highest-count option (null when no votes). Determined by count, never position. */
+  leader: LeaderInfo | null;
+  /** Option values tied at the top count (safe tie handling). */
+  tiedValues: string[];
+  isTie: boolean;
 };
 export type RatingSummary = {
   id: string;
@@ -73,14 +78,26 @@ function tally(
   questionId?: string,
   explicitOrder?: readonly string[],
 ): DistRow[] {
-  const canonical = explicitOrder ?? questionById(questionId ?? "")?.options.map((option) => option.value) ?? [];
-  const { counts, percentages } = countValidVotes(values, canonical);
-  return canonical.map((value) => ({
-    value,
-    label: questionId ? labelFor(questionId, value) : value,
-    count: counts[value],
-    percent: percentages[value],
-  }));
+  const counts = new Map<string, number>();
+  let total = 0;
+  for (const raw of values) {
+    if (raw === null || raw === undefined || raw === "") continue;
+    const key = String(raw);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+    total += 1;
+  }
+
+  const canonical = explicitOrder ?? questionById(questionId ?? "")?.options.map((option) => option.value);
+  const order = canonical ? [...canonical] : [...counts.keys()];
+  return order.map((value) => {
+    const count = counts.get(value) ?? 0;
+    return {
+      value,
+      label: questionId ? labelFor(questionId, value) : value,
+      count,
+      percent: total ? Math.round((count / total) * 100) : 0,
+    };
+  });
 }
 
 function averageOf(values: number[]): number {
@@ -110,11 +127,12 @@ export async function getForm1Results(): Promise<Form1Results> {
         .where(eq(form1Responses.surveyVersion, SURVEY_VERSION))
         .orderBy(desc(form1Responses.createdAt));
     } catch (err) {
+      console.warn("Postgres fetch failed, falling back to local store:", err);
       markDatabaseBroken(err instanceof Error ? err.message : String(err));
-      throw new Error("Survey results are temporarily unavailable");
+      rows = getAllForm1();
+      isFallback = true;
     }
   } else {
-    // Preview-only fallback when no persistent database is configured.
     rows = getAllForm1();
     isFallback = true;
   }
@@ -127,7 +145,8 @@ export async function getForm1Results(): Promise<Form1Results> {
     });
     const distRows = tally(values, q.id);
     const total = distRows.reduce((sum, r) => sum + r.count, 0);
-    return { id: q.id, title: q.titleBn, titleEn: q.titleEn, total, rows: distRows };
+    const { leader, tiedValues, isTie } = computeLeader(distRows);
+    return { id: q.id, title: q.titleBn, titleEn: q.titleEn, total, rows: distRows, leader, tiedValues, isTie };
   });
 
   return {
@@ -166,17 +185,14 @@ export async function getForm2Results(): Promise<Form2Results> {
     label: string,
     range: string | undefined,
     values: number[],
-  ): RatingSummary => {
-    const valid = values.filter((value) => Number.isInteger(value) && value >= 1 && value <= 5);
-    return {
-      id,
-      label,
-      range,
-      average: averageOf(valid),
-      total: valid.length,
-      distribution: tally(valid, undefined, ["1", "2", "3", "4", "5"]),
-    };
-  };
+  ): RatingSummary => ({
+    id,
+    label,
+    range,
+    average: averageOf(values),
+    total: values.length,
+    distribution: tally(values, undefined, ["1", "2", "3", "4", "5"]),
+  });
 
   let rows: (Form2Row | Form2Record)[] = [];
   let isFallback = false;
@@ -190,8 +206,10 @@ export async function getForm2Results(): Promise<Form2Results> {
         .where(eq(form2Responses.surveyVersion, SURVEY_VERSION))
         .orderBy(desc(form2Responses.createdAt));
     } catch (err) {
+      console.warn("Postgres fetch failed, falling back to local store:", err);
       markDatabaseBroken(err instanceof Error ? err.message : String(err));
-      throw new Error("Survey results are temporarily unavailable");
+      rows = getAllForm2();
+      isFallback = true;
     }
   } else {
     rows = getAllForm2();
@@ -233,18 +251,14 @@ export async function getForm2Results(): Promise<Form2Results> {
       undefined,
       fairnessValues,
     ),
-    roleSplit: {
-      id: "role",
-      title: "Role",
-      total: rows.length,
-      rows: tally(rows.map((r) => r.role), undefined, ROLE_OPTIONS.map((option) => option.value)),
-    },
-    departmentSplit: {
-      id: "department",
-      title: "Department",
-      total: rows.length,
-      rows: tally(rows.map((r) => r.department), undefined, DEPARTMENTS),
-    },
+    roleSplit: (() => {
+      const rowsDist = tally(rows.map((r) => r.role), undefined, ROLE_OPTIONS.map((option) => option.value));
+      return { id: "role", title: "Role", total: rows.length, rows: rowsDist, ...computeLeader(rowsDist) };
+    })(),
+    departmentSplit: (() => {
+      const rowsDist = tally(rows.map((r) => r.department), undefined, DEPARTMENTS);
+      return { id: "department", title: "Department", total: rows.length, rows: rowsDist, ...computeLeader(rowsDist) };
+    })(),
     feedback: rows
       .filter((r) => r.feedback && r.feedback.trim().length > 0)
       .slice(0, 40)

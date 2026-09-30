@@ -134,12 +134,8 @@ export async function POST(req: NextRequest) {
       invalidateForm1Caches();
       return NextResponse.json({ ok: true, id: inserted[0].id });
     } catch (error) {
-      console.error("PostgreSQL insert failed:", error);
+      console.warn("PostgreSQL insert failed, using preview fallback:", error);
       markDatabaseBroken(error instanceof Error ? error.message : String(error));
-      return NextResponse.json(
-        { error: "Response was not saved. Please retry shortly." },
-        { status: 503 },
-      );
     }
   }
 

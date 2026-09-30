@@ -1,22 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 export default function RefreshButton() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    const refresh = () => { if (!document.hidden) router.refresh(); };
-    const timer = window.setInterval(refresh, 15_000);
-    document.addEventListener("visibilitychange", refresh);
-    return () => {
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", refresh);
-    };
-  }, [router]);
-
   return (
     <button
       type="button"

@@ -4,7 +4,6 @@ import { useState, type ReactNode } from "react";
 import { Check, Sparkles } from "lucide-react";
 import type { Option } from "@/lib/survey";
 import type { PollStats } from "@/lib/poll-stats-client";
-import { sortOptionsByLivePercentage } from "@/lib/poll-analytics";
 
 type PollCardProps = {
   form: "form1" | "form2";
@@ -32,18 +31,16 @@ export default function PollCard({
   initialStats,
   statsStatus = "loading",
 }: PollCardProps) {
-  // Fixed position and result visibility are separate. Every poll card,
-  // including semester, reveals ALL its options only after a local click.
-  const [clickedQuestion, setClickedQuestion] = useState<string | null>(null);
-  const clicked = clickedQuestion === questionId;
+  // Each card reveals ONLY its own results, and only after the user clicks
+  // an option inside THIS card. Nothing else on the page is affected.
+  const [clicked, setClicked] = useState(false);
   const stats = initialStats ?? null;
-  const orderedOptions = sortOptionsByLivePercentage(options, stats);
   const showAllResults = clicked && stats !== null;
   const waiting = clicked && stats === null;
 
   function select(option: Option) {
     onChange(option.value);
-    setClickedQuestion(questionId); // selection never makes a database request
+    setClicked(true); // immediate local selection; no request on click
   }
 
   return (
@@ -64,7 +61,7 @@ export default function PollCard({
       </div>
 
       <div className="mt-5 space-y-2.5" role="group" aria-label={subtitle ?? title}>
-        {orderedOptions.map((option) => {
+        {options.map((option) => {
           const selected = value === option.value;
           const percent = stats?.percentages?.[option.value] ?? 0;
           const count = stats?.counts?.[option.value] ?? 0;

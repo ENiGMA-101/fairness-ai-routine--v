@@ -49,6 +49,23 @@ export const FORM2_DEPARTMENT_OPTIONS: Option[] = DEPARTMENT_OPTIONS.map((option
 
 export const SEMESTERS = ["1.1", "1.2", "2.1", "2.2", "3.1", "3.2", "4.1", "4.2"] as const;
 
+/**
+ * Fisher–Yates shuffle used ONLY by the survey UI to randomize question order
+ * on entry. It never mutates the canonical arrays and is never used by the
+ * results pages, the database, or the stored answer mapping.
+ */
+export function shuffleArray<T>(items: readonly T[]): T[] {
+  const array = [...items];
+  for (let i = array.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
+/** Ordinal 1–5 rating values shared by Form 2 slots and rating questions. */
+export const RATING_OPTION_VALUES = ["1", "2", "3", "4", "5"] as const;
+
 export const STUDENT_SECTION_INTRO = {
   title: "🎓 Student Section",
   english: [
@@ -265,30 +282,6 @@ export const FORM1_ALLOWED_VALUES: Record<string, readonly string[]> = Object.fr
   FORM1_QUESTIONS.map((question) => [question.id, question.options.map((option) => option.value)]),
 );
 
-/**
- * Display-only shuffle. Original question definitions, IDs and results order do
- * not change. Role/department/semester keep their original serial positions;
- * student and teacher questions each shuffle within their own audience.
- */
-export function shuffleSurveyQuestions(
-  questions: readonly QuestionDef[],
-  random: () => number = Math.random,
-): QuestionDef[] {
-  const pinned = questions.filter(({ id }) => id === "role" || id === "department" || id === "semester");
-  const student = questions.filter(({ audience, id }) => audience === "Student" && id !== "semester");
-  const teacher = questions.filter(({ audience }) => audience === "Teacher");
-  const shared = questions.filter(({ audience, id }) => audience === "Both" && id !== "role" && id !== "department");
-  const shuffle = (items: QuestionDef[]) => {
-    const copy = [...items];
-    for (let i = copy.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(random() * (i + 1));
-      [copy[i], copy[j]] = [copy[j], copy[i]];
-    }
-    return copy;
-  };
-  return [...pinned, ...shuffle(student), ...shuffle(teacher), ...shuffle(shared)];
-}
-
 export type SlotDef = { id: string; label: string; range: string };
 
 export const TIME_SLOTS: SlotDef[] = [
@@ -377,4 +370,26 @@ export function questionById(questionId: string): QuestionDef | undefined {
 
 export function labelFor(questionId: string, value: string | number): string {
   return questionById(questionId)?.options.find((option) => option.value === String(value))?.label ?? String(value);
+}
+
+/**
+ * Every option value a question can hold, in canonical order.
+ * Used by the stats API so options with 0 votes are still represented.
+ */
+export function canonicalOptionValues(questionId: string): string[] {
+  if (questionId === "role") return ROLE_OPTIONS.map((option) => option.value);
+  if (questionId === "department") return [...DEPARTMENTS];
+  return questionById(questionId)?.options.map((option) => option.value) ?? [];
+}
+
+/**
+ * Canonical option values for a stats column, per form. Guarantees the
+ * percentage denominator is the count of valid answers for THAT question and
+ * that every defined option (even with 0 votes) is present.
+ */
+export function optionValuesForStat(form: "form1" | "form2", key: string): string[] {
+  if (form === "form1") return canonicalOptionValues(key);
+  if (key === "role") return ROLE_OPTIONS.map((option) => option.value);
+  if (key === "department") return [...DEPARTMENTS];
+  return [...RATING_OPTION_VALUES];
 }
