@@ -1,12 +1,8 @@
 {
-  "/api/counters/route": "app/api/counters/route.js",
+  "/_not-found/page": "app/_not-found/page.js",
   "/api/form1/stats/all/route": "app/api/form1/stats/all/route.js",
-  "/api/form1/submit/route": "app/api/form1/submit/route.js",
   "/api/form2/stats/all/route": "app/api/form2/stats/all/route.js",
-  "/api/form2/submit/route": "app/api/form2/submit/route.js",
-  "/form1/page": "app/form1/page.js",
-  "/form2/page": "app/form2/page.js",
+  "/api/participation/route": "app/api/participation/route.js",
   "/page": "app/page.js",
-  "/results/form1/page": "app/results/form1/page.js",
-  "/results/form2/page": "app/results/form2/page.js"
+  "/results/form1/page": "app/results/form1/page.js"
 }

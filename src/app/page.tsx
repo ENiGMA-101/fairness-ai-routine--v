@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  ArrowDown,
   ArrowRight,
   ArrowUpRight,
   BarChart3,
@@ -44,6 +45,15 @@ export default function Home() {
           </Link>
           <nav className="research-navigation" aria-label="Main navigation">
             <a href="#about" className="research-nav-about">About the research</a>
+            <a
+              href="#participation-card"
+              className="research-results-link"
+              aria-label="Jump to live participants"
+            >
+              <BarChart3 size={14} />
+              <span>Live Participants</span>
+              <ArrowDown size={14} />
+            </a>
             <Link href="/results/form1" className="research-results-link">
               <BarChart3 size={16} /> <span>Live results</span> <ArrowUpRight size={14} />
             </Link>

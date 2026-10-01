@@ -21,7 +21,11 @@ export default function LiveParticipationCard() {
   const number = (value: number | undefined) => value === undefined ? "—" : value.toLocaleString();
 
   return (
-    <section className="participation-card" aria-labelledby="participation-heading">
+    <section
+  id="participation-card"
+  className="participation-card"
+  aria-labelledby="participation-heading"
+>
       <div className="participation-card-head">
         <div>
           <span className="participation-eyebrow"><Radio size={13} /> Better, together</span>
