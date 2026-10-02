@@ -14,6 +14,7 @@ A research platform for collecting student and teacher scheduling preferences, t
 
 - [Project overview](#project-overview)
 - [Research goals](#research-goals)
+- [Promo Video](#promo-video)
 - [How the platform works](#how-the-platform-works)
 - [Public routes](#public-routes)
 - [Survey design](#survey-design)
@@ -52,6 +53,10 @@ The platform is designed to help investigate:
 4. **Campus-gap perception** — measure whether long idle gaps between classes are considered harmful or useful.
 5. **Multi-semester fairness** — understand whether a difficult routine in one semester should influence future scheduling decisions.
 6. **Fairness-aware optimization** — provide future AI systems with human-centered constraints and preference weights instead of optimizing only for feasibility.
+
+## Promo Video
+
+https://github.com/user-attachments/assets/08499107-1a4b-4605-b42b-c77790635a64
 
 ## How the platform works
 
