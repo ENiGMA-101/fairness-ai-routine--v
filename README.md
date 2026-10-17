@@ -56,7 +56,9 @@ The platform is designed to help investigate:
 
 ## Promo Video
 
-https://github.com/user-attachments/assets/08499107-1a4b-4605-b42b-c77790635a64
+https://github.com/user-attachments/assets/d3b25593-eaa0-45ff-8181-4c45252256b1
+
+
 
 ## How the platform works
 
