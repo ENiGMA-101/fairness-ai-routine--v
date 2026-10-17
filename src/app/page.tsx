@@ -1,3 +1,4 @@
+import RotatingHeadline from "@/components/RotatingHeadline";
 import Link from "next/link";
 import {
   ArrowDown,
@@ -64,7 +65,7 @@ export default function Home() {
       <main>
         <section className="research-intro research-container" aria-labelledby="research-heading">
           <div className="research-eyebrow"><span /> University of Asia Pacific · Research study</div>
-          <h1 id="research-heading">Better schedules.<br className="mobile-break" /> <span>Fairer opportunities.</span></h1>
+          <RotatingHeadline />
           <p className="research-intro-text">Your experience can help shape a more balanced university routine.<br className="desktop-break" /> Choose a short survey below. Start with either one.</p>
           <p lang="bn" className="research-intro-bn">আপনার মতামত গুরুত্বপূর্ণ। নিচের যেকোনো জরিপ দিয়ে শুরু করুন।</p>
         </section>
