@@ -16,12 +16,37 @@ import {
   Sparkles,
   UsersRound,
 } from "lucide-react";
+import fs from "node:fs";
+import path from "node:path";
 import PollStatsWarmup from "@/components/PollStatsWarmup";
 import ResponseCounters from "@/components/ResponseCounters";
 import LiveParticipationCard from "@/components/LiveParticipationCard";
 
-// Static HTML keeps the landing page fast. Aggregate data loads separately.
-export const revalidate = 300;
+function getMediaAssets() {
+  const assetsDir = path.join(process.cwd(), "public", "assets");
+  let videoSrc = "/assets/fairness-promo.mp4";
+  let posterSrc = "/assets/1-1%20Poster.jpeg";
+
+  try {
+    if (fs.existsSync(assetsDir)) {
+      const files = fs.readdirSync(assetsDir);
+      const video = files.find((f) => /\.(mp4|webm|mov|m4v|ogg)$/i.test(f));
+      if (video) {
+        videoSrc = `/assets/${encodeURIComponent(video)}`;
+      }
+      const poster = files.find((f) => /\.(jpe?g|png|webp)$/i.test(f));
+      if (poster) {
+        posterSrc = `/assets/${encodeURIComponent(poster)}`;
+      }
+    }
+  } catch {
+    // fallback defaults
+  }
+
+  return { videoSrc, posterSrc };
+}
+
+export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Fairness-Aware AI Routine Generator · Research Project",
@@ -30,6 +55,8 @@ export const metadata = {
 };
 
 export default function Home() {
+  const { videoSrc, posterSrc } = getMediaAssets();
+
   return (
     <div className="research-site">
       <PollStatsWarmup />
@@ -76,44 +103,64 @@ export default function Home() {
             <span><Clock3 size={14} /> Just a few minutes</span>
           </div>
 
-          <div className="research-survey-grid">
-            <article className="research-survey-card survey-purple">
-              <div className="research-card-top">
-                <span className="research-survey-icon"><GraduationCap size={27} strokeWidth={1.6} /></span>
-                <span className="research-form-label">Form 01</span>
-                <span className="research-time"><Clock3 size={14} /> 2–3 min</span>
+          <div className="research-survey-layout">
+            {/* Left side: Embedded promotional video (~35% width on desktop) */}
+            <div className="research-video-panel">
+              <div className="research-video-wrapper">
+                <video
+                  controls
+                  playsInline
+                  preload="metadata"
+                  poster={posterSrc}
+                  className="research-video-player"
+                  aria-label="Fairness-Aware AI Routine Generator promotional video"
+                >
+                  <source src={videoSrc} type="video/mp4" />
+                  Your browser does not support the video tag.
+                </video>
               </div>
-              <h3>Student &amp; Teacher Survey</h3>
-              <p lang="bn" className="research-card-bn">শিক্ষার্থী ও শিক্ষক জরিপ</p>
-              <p className="research-card-description">Tell us what a better class routine looks like for you—from daily timing and breaks to a fair teaching workload.</p>
-              <div className="research-card-tags"><span><UsersRound size={13} /> Students &amp; teachers</span><span>Bangla + English</span></div>
+            </div>
 
-              <div className="research-card-action">
-                <Link href="/form1" className="research-open-button" aria-label="Open Form 1 — Student and Teacher Survey">
-                  <span>Open Form 1</span><ArrowRight size={19} />
-                </Link>
-                <span className="research-card-note"><ShieldCheck size={13} /> No account needed</span>
-              </div>
-            </article>
+            {/* Right side: Form 01 top, Form 02 below stacked (~65% width on desktop) */}
+            <div className="research-forms-stack">
+              <article className="research-survey-card survey-purple">
+                <div className="research-card-top">
+                  <span className="research-survey-icon"><GraduationCap size={27} strokeWidth={1.6} /></span>
+                  <span className="research-form-label">Form 01</span>
+                  <span className="research-time"><Clock3 size={14} /> 2–3 min</span>
+                </div>
+                <h3>Student &amp; Teacher Survey</h3>
+                <p lang="bn" className="research-card-bn">শিক্ষার্থী ও শিক্ষক জরিপ</p>
+                <p className="research-card-description">Tell us what a better class routine looks like for you—from daily timing and breaks to a fair teaching workload.</p>
+                <div className="research-card-tags"><span><UsersRound size={13} /> Students &amp; teachers</span><span>Bangla + English</span></div>
 
-            <article className="research-survey-card survey-teal">
-              <div className="research-card-top">
-                <span className="research-survey-icon"><CalendarDays size={27} strokeWidth={1.6} /></span>
-                <span className="research-form-label">Form 02</span>
-                <span className="research-time"><Clock3 size={14} /> 2 min</span>
-              </div>
-              <h3>Time-Slot Rating Survey</h3>
-              <p lang="bn" className="research-card-bn">সময়ের পছন্দ রেটিং জরিপ</p>
-              <p className="research-card-description">Rate seven daily class slots and share your views on long campus gaps and fairness from one semester to the next.</p>
-              <div className="research-card-tags"><span><Clock3 size={13} /> 7 time slots</span><span>1–5 rating scale</span></div>
+                <div className="research-card-action">
+                  <Link href="/form1" className="research-open-button" aria-label="Open Form 1 — Student and Teacher Survey">
+                    <span>Open Form 1</span><ArrowRight size={19} />
+                  </Link>
+                  <span className="research-card-note"><ShieldCheck size={13} /> No account needed</span>
+                </div>
+              </article>
 
-              <div className="research-card-action">
-                <Link href="/form2" className="research-open-button" aria-label="Open Form 2 — Time-Slot Rating Survey">
-                  <span>Open Form 2</span><ArrowRight size={19} />
-                </Link>
-                <span className="research-card-note"><ShieldCheck size={13} /> No account needed</span>
-              </div>
-            </article>
+              <article className="research-survey-card survey-teal">
+                <div className="research-card-top">
+                  <span className="research-survey-icon"><CalendarDays size={27} strokeWidth={1.6} /></span>
+                  <span className="research-form-label">Form 02</span>
+                  <span className="research-time"><Clock3 size={14} /> 2 min</span>
+                </div>
+                <h3>Time-Slot Rating Survey</h3>
+                <p lang="bn" className="research-card-bn">সময়ের পছন্দ রেটিং জরিপ</p>
+                <p className="research-card-description">Rate seven daily class slots and share your views on long campus gaps and fairness from one semester to the next.</p>
+                <div className="research-card-tags"><span><Clock3 size={13} /> 7 time slots</span><span>1–5 rating scale</span></div>
+
+                <div className="research-card-action">
+                  <Link href="/form2" className="research-open-button" aria-label="Open Form 2 — Time-Slot Rating Survey">
+                    <span>Open Form 2</span><ArrowRight size={19} />
+                  </Link>
+                  <span className="research-card-note"><ShieldCheck size={13} /> No account needed</span>
+                </div>
+              </article>
+            </div>
           </div>
 
           <div className="research-trust-strip">
