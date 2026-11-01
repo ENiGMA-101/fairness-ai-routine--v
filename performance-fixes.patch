@@ -1,0 +1,1314 @@
+diff --git a/src/app/api/form1/stats/all/route.ts b/src/app/api/form1/stats/all/route.ts
+index 7e1eb9d..e9112b7 100644
+--- a/src/app/api/form1/stats/all/route.ts
++++ b/src/app/api/form1/stats/all/route.ts
+@@ -1,4 +1,5 @@
+ import { NextResponse } from "next/server";
++import { cachedValue } from "@/lib/stats-cache";
+ import { eq } from "drizzle-orm";
+ import { db, ensureTablesExist, isDatabaseConfigured, isDatabaseMarkedBroken, markDatabaseBroken } from "@/db";
+ import { form1Responses } from "@/db/schema";
+@@ -58,6 +59,8 @@ async function readAll(): Promise<PollStatsMap> {
+ }
+ 
+ export async function GET() {
+-  const data = await readAll();
++  // Shared 1.5s window: N concurrent pollers cost one database read, while a new
++  // submission (invalidate on submit) or the next poll still shows fresh results.
++  const data = await cachedValue("poll-stats-form1", 1_500, readAll);
+   return NextResponse.json(data, { headers: { "Cache-Control": "no-store" } });
+ }
+diff --git a/src/app/api/form2/stats/all/route.ts b/src/app/api/form2/stats/all/route.ts
+index da2e585..361d8fd 100644
+--- a/src/app/api/form2/stats/all/route.ts
++++ b/src/app/api/form2/stats/all/route.ts
+@@ -1,4 +1,5 @@
+ import { NextResponse } from "next/server";
++import { cachedValue } from "@/lib/stats-cache";
+ import { eq } from "drizzle-orm";
+ import { db, ensureTablesExist, isDatabaseConfigured, isDatabaseMarkedBroken, markDatabaseBroken } from "@/db";
+ import { form2Responses } from "@/db/schema";
+@@ -54,6 +55,8 @@ async function readAll(): Promise<PollStatsMap> {
+ }
+ 
+ export async function GET() {
+-  const data = await readAll();
++  // Shared 1.5s window: N concurrent pollers cost one database read, while a new
++  // submission (invalidate on submit) or the next poll still shows fresh results.
++  const data = await cachedValue("poll-stats-form2", 1_500, readAll);
+   return NextResponse.json(data, { headers: { "Cache-Control": "no-store" } });
+ }
+diff --git a/src/app/api/participation/route.ts b/src/app/api/participation/route.ts
+index a0e5538..d660326 100644
+--- a/src/app/api/participation/route.ts
++++ b/src/app/api/participation/route.ts
+@@ -3,6 +3,7 @@ import { and, eq, lt, sql } from "drizzle-orm";
+ import { db, ensureTablesExist } from "@/db";
+ import { form1Responses, form2Responses, surveyPresence } from "@/db/schema";
+ import { SURVEY_VERSION } from "@/lib/survey";
++import { cachedValue, invalidate } from "@/lib/stats-cache";
+ import { PRESENCE_TIMEOUT_SECONDS, type ParticipationSnapshot } from "@/lib/participation";
+ 
+ export const dynamic = "force-dynamic";
+@@ -19,10 +20,9 @@ type CountsRow = {
+ };
+ 
+ /** Database-only aggregates. Drafts and local submission markers are never read. */
+-export async function GET() {
+-  try {
+-    await ensureTablesExist();
+-    const result = await db.execute<CountsRow>(sql`
++async function readSnapshot(): Promise<ParticipationSnapshot> {
++  await ensureTablesExist();
++  const result = await db.execute<CountsRow>(sql`
+       WITH active AS (
+         SELECT ${surveyPresence.browserId} AS browser_id, ${surveyPresence.scope} AS scope
+         FROM ${surveyPresence}
+@@ -42,12 +42,19 @@ export async function GET() {
+         (SELECT count(DISTINCT browser_id) FROM submitted WHERE form = 'form1') AS submitted_form1,
+         (SELECT count(DISTINCT browser_id) FROM submitted WHERE form = 'form2') AS submitted_form2
+     `);
+-    const row = result.rows[0];
+-    const snapshot: ParticipationSnapshot = {
+-      live: { total: Number(row.live_total), form1: Number(row.live_form1), form2: Number(row.live_form2) },
+-      submitted: { total: Number(row.submitted_total), form1: Number(row.submitted_form1), form2: Number(row.submitted_form2) },
+-      updatedAt: new Date().toISOString(),
+-    };
++  const row = result.rows[0];
++  return {
++    live: { total: Number(row.live_total), form1: Number(row.live_form1), form2: Number(row.live_form2) },
++    submitted: { total: Number(row.submitted_total), form1: Number(row.submitted_form1), form2: Number(row.submitted_form2) },
++    updatedAt: new Date().toISOString(),
++  };
++}
++
++export async function GET() {
++  try {
++    // Shared 1.5s window across all concurrent pollers (clients poll every 4s);
++    // "home-stats" is already invalidated by both submit routes.
++    const snapshot = await cachedValue("home-stats:participation", 1_500, readSnapshot, { staleOnError: false });
+     return NextResponse.json(snapshot, { headers });
+   } catch (error) {
+     console.error("Participation aggregate unavailable:", error);
+@@ -88,9 +95,14 @@ export async function POST(request: NextRequest) {
+           set: { scope: scope as string, lastSeen: sql`now()` },
+           setWhere: eq(surveyPresence.browserId, browserId),
+         });
+-      // Physical cleanup is additive and never touches either response table.
+-      await db.delete(surveyPresence).where(lt(surveyPresence.lastSeen, sql`now() - interval '5 minutes'`));
++      // Physical cleanup is additive and never touches either response table. Live counts
++      // already ignore rows older than the timeout, so tidy up on ~1 in 8 heartbeats
++      // instead of paying an extra database round trip on every one.
++      if (Math.random() < 0.125) {
++        await db.delete(surveyPresence).where(lt(surveyPresence.lastSeen, sql`now() - interval '5 minutes'`));
++      }
+     }
++    invalidate("home-stats:participation");
+     return NextResponse.json({ ok: true }, { headers });
+   } catch (error) {
+     console.error("Presence heartbeat unavailable:", error);
+diff --git a/src/app/form1/page.tsx b/src/app/form1/page.tsx
+index a12f49b..7b21f03 100644
+--- a/src/app/form1/page.tsx
++++ b/src/app/form1/page.tsx
+@@ -1,7 +1,7 @@
+ "use client";
+ 
+-import Link from "next/link";
+-import { useEffect, useMemo, useState } from "react";
++import NavLink from "@/components/NavLink";
++import { useEffect, useMemo, useRef, useState } from "react";
+ import confetti from "canvas-confetti";
+ import {
+   GraduationCap,
+@@ -19,6 +19,7 @@ import { FORM1_VISUALS } from "@/components/Visuals";
+ import { useSurveyPollStats } from "@/lib/poll-stats-client";
+ import { clearDraft, getBrowserId, isSubmitted, markSubmitted } from "@/lib/browser";
+ import DraftNotice from "@/components/DraftNotice";
++import { focusSurveyQuestion } from "@/components/SurveyNavigator";
+ import { EMPTY_FORM1_DRAFT, restoreForm1Draft, useLocalSurveyDraft } from "@/lib/local-draft";
+ import {
+   DEPARTMENT_OPTIONS,
+@@ -39,6 +40,9 @@ export default function Form1Page() {
+   const [submitted, setSubmitted] = useState(false);
+   const [loading, setLoading] = useState(false);
+   const [error, setError] = useState("");
++  const [showIncomplete, setShowIncomplete] = useState(false);
++  // Synchronous re-entry guard: a fast double click can never start two submissions.
++  const submittingRef = useRef(false);
+   const { stats: batchStats, status: statsStatus } = useSurveyPollStats("form1");
+   // Distinguishes a newly acknowledged submission from an earlier submission.
+   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
+@@ -83,7 +87,15 @@ export default function Form1Page() {
+     setAnswers((prev) => ({ ...prev, [id]: value }));
+ 
+   const submit = async () => {
+-    if (!localDraft.ready || !canSubmit || loading || submitted || isSubmitted("form1")) return;
++    if (submittingRef.current || !localDraft.ready || loading || submitted || isSubmitted("form1")) return;
++    if (!canSubmit) {
++      // Respond to the click: explain what is missing and jump to it (validation rules unchanged).
++      setShowIncomplete(true);
++      const firstMissing = !role ? "role" : !department ? "department" : (department === "Other" && !departmentOther.trim()) ? "department" : visible.find((q) => !answers[q.id])?.id;
++      if (firstMissing) focusSurveyQuestion(firstMissing);
++      return;
++    }
++    submittingRef.current = true;
+     setLoading(true);
+     setError("");
+ 
+@@ -124,6 +136,7 @@ export default function Form1Page() {
+     } catch {
+       setError("সংযোগ পাওয়া যায়নি। আপনার উত্তর জমা হয়নি — পরে আবার চেষ্টা করুন। / Connection lost. Please retry.");
+     } finally {
++      submittingRef.current = false;
+       setLoading(false);
+     }
+   };
+@@ -151,12 +164,12 @@ export default function Form1Page() {
+             </p>
+           </div>
+           <div className="mt-6 space-y-3">
+-            <Link
++            <NavLink
+               href="/results/form1"
+               className="flex items-center justify-center gap-2 w-full rounded-2xl bg-black py-3.5 text-sm font-bold text-white shadow-lg transition hover:bg-zinc-800"
+             >
+               <BarChart3 className="h-4 w-4" /> View Live Results
+-            </Link>
++            </NavLink>
+             <HomeButton label="Back to survey home" />
+           </div>
+         </div>
+@@ -190,18 +203,18 @@ export default function Form1Page() {
+           </div>
+ 
+           <div className="mt-6 space-y-3">
+-            <Link
++            <NavLink
+               href="/form2"
+               className="flex items-center justify-center gap-2 w-full rounded-2xl bg-violet-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-violet-500/25 transition hover:bg-violet-700"
+             >
+               Now submit Form 2 (Time-Slot Rating) <ArrowRight className="h-4 w-4" />
+-            </Link>
+-            <Link
++            </NavLink>
++            <NavLink
+               href="/results/form1"
+               className="flex items-center justify-center gap-2 w-full rounded-2xl border-2 border-zinc-200 bg-white py-3.5 text-sm font-bold text-zinc-800 transition hover:bg-zinc-50"
+             >
+               <BarChart3 className="h-4 w-4" /> View Live Form 1 Results
+-            </Link>
++            </NavLink>
+             <HomeButton label="Back to survey home" />
+           </div>
+         </div>
+@@ -258,7 +271,7 @@ export default function Form1Page() {
+         <DraftNotice ready={localDraft.ready} hasDraft={localDraft.hasDraft} restored={localDraft.restored} storageAvailable={localDraft.storageAvailable} />
+ 
+         {/* Common profile questions — same wording and order as Google Forms */}
+-        <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
++        <section id="question-role" className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
+           <h3 className="text-[17px] font-bold text-zinc-900">Are you a Student or Teacher? *</h3>
+           <div className="mt-5 grid grid-cols-2 gap-3">
+             {ROLE_OPTIONS.map((option) => {
+@@ -283,7 +296,7 @@ export default function Form1Page() {
+           </div>
+         </section>
+ 
+-        <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
++        <section id="question-department" className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
+           <h3 className="text-[17px] font-bold text-zinc-900">Which department do you belong to? *</h3>
+           <div className="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+             {DEPARTMENT_OPTIONS.map((option) => {
+@@ -374,15 +387,23 @@ export default function Form1Page() {
+           </div>
+         ) : null}
+ 
++        {showIncomplete && !canSubmit ? (
++          <div role="alert" className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-900">
++            Please answer every required question ({Math.max(1, total - answered)} left). We scrolled you to the first one. / অনুগ্রহ করে সব প্রশ্নের উত্তর দিন।
++          </div>
++        ) : null}
++
+         {/* Submit Button */}
+         <div className="mt-8 space-y-3">
+           <button
+             type="button"
+             onClick={submit}
+-            disabled={!localDraft.ready || !canSubmit || loading || submitted}
+-            className="w-full rounded-[24px] bg-black py-5 text-lg font-black text-white shadow-xl transition-all hover:bg-zinc-800 disabled:opacity-40 disabled:hover:bg-black"
++            disabled={!localDraft.ready || loading || submitted}
++            aria-busy={loading}
++            aria-disabled={!canSubmit}
++            className={`w-full rounded-[24px] bg-black py-5 text-lg font-black text-white shadow-xl transition-all hover:bg-zinc-800 disabled:cursor-wait disabled:opacity-70 disabled:hover:bg-black ${canSubmit ? "" : "opacity-50"}`}
+           >
+-            {loading ? "Submitting Response…" : `Submit Response (${answered}/${total})`}
++            {loading ? <><span className="btn-spinner" aria-hidden="true" />Submitting Response…</> : `Submit Response (${answered}/${total})`}
+           </button>
+           <div className="flex items-center justify-center gap-2 text-xs text-zinc-400">
+             <span>🔒 Fully anonymous</span>
+diff --git a/src/app/form2/page.tsx b/src/app/form2/page.tsx
+index c757611..75c9920 100644
+--- a/src/app/form2/page.tsx
++++ b/src/app/form2/page.tsx
+@@ -1,7 +1,7 @@
+ "use client";
+ 
+-import Link from "next/link";
+-import { useEffect, useMemo, useState } from "react";
++import NavLink from "@/components/NavLink";
++import { useEffect, useMemo, useRef, useState } from "react";
+ import confetti from "canvas-confetti";
+ import {
+   GraduationCap,
+@@ -20,6 +20,7 @@ import { useSurveyPollStats } from "@/lib/poll-stats-client";
+ import { VisualFairness, VisualLongGapForm2 } from "@/components/Visuals";
+ import { clearDraft, getBrowserId, isSubmitted, markSubmitted } from "@/lib/browser";
+ import DraftNotice from "@/components/DraftNotice";
++import { focusSurveyQuestion } from "@/components/SurveyNavigator";
+ import { EMPTY_FORM2_DRAFT, restoreForm2Draft, useLocalSurveyDraft } from "@/lib/local-draft";
+ import {
+   DEPARTMENTS,
+@@ -46,6 +47,9 @@ export default function Form2Page() {
+   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
+   const [loading, setLoading] = useState(false);
+   const [error, setError] = useState("");
++  const [showIncomplete, setShowIncomplete] = useState(false);
++  // Synchronous re-entry guard: a fast double click can never start two submissions.
++  const submittingRef = useRef(false);
+   const { stats: batchStats, status: statsStatus } = useSurveyPollStats("form2");
+ 
+   useEffect(() => {
+@@ -85,7 +89,15 @@ export default function Form2Page() {
+     (department !== "Other" || departmentOther.trim().length > 0);
+ 
+   const submit = async () => {
+-    if (!localDraft.ready || !canSubmit || loading || submitted || isSubmitted("form2")) return;
++    if (submittingRef.current || !localDraft.ready || loading || submitted || isSubmitted("form2")) return;
++    if (!canSubmit) {
++      // Respond to the click: explain what is missing and jump to it (validation rules unchanged).
++      setShowIncomplete(true);
++      const firstMissing = !role ? "role" : !department ? "department" : (department === "Other" && !departmentOther.trim()) ? "department" : !allSlotsRated ? "time-slots" : longGap === null ? "long_gap_rating" : fairness === null ? "fairness_rating" : undefined;
++      if (firstMissing) focusSurveyQuestion(firstMissing);
++      return;
++    }
++    submittingRef.current = true;
+     setLoading(true);
+     setError("");
+ 
+@@ -129,6 +141,7 @@ export default function Form2Page() {
+     } catch {
+       setError("সংযোগ পাওয়া যায়নি। আপনার উত্তর জমা হয়নি — পরে আবার চেষ্টা করুন। / Connection lost. Please retry.");
+     } finally {
++      submittingRef.current = false;
+       setLoading(false);
+     }
+   };
+@@ -156,12 +169,12 @@ export default function Form2Page() {
+             </p>
+           </div>
+           <div className="mt-6 space-y-3">
+-            <Link
++            <NavLink
+               href="/results/form2"
+               className="flex items-center justify-center gap-2 w-full rounded-2xl bg-black py-3.5 text-sm font-bold text-white shadow-lg transition hover:bg-zinc-800"
+             >
+               <BarChart3 className="h-4 w-4" /> View Live Results
+-            </Link>
++            </NavLink>
+             <HomeButton label="Back to survey home" />
+           </div>
+         </div>
+@@ -195,18 +208,18 @@ export default function Form2Page() {
+           </div>
+ 
+           <div className="mt-6 space-y-3">
+-            <Link
++            <NavLink
+               href="/form1"
+               className="flex items-center justify-center gap-2 w-full rounded-2xl bg-violet-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-violet-500/25 transition hover:bg-violet-700"
+             >
+               <GraduationCap className="h-4 w-4" /> Now submit Form 1 (Student &amp; Teacher) →
+-            </Link>
+-            <Link
++            </NavLink>
++            <NavLink
+               href="/results/form2"
+               className="flex items-center justify-center gap-2 w-full rounded-2xl border-2 border-zinc-200 bg-white py-3.5 text-sm font-bold text-zinc-800 transition hover:bg-zinc-50"
+             >
+               <BarChart3 className="h-4 w-4" /> View Time-Slot Ranking Dashboard
+-            </Link>
++            </NavLink>
+             {/* placeholder-removed */}
+             <HomeButton label="Back to survey home" />
+           </div>
+@@ -264,7 +277,7 @@ export default function Form2Page() {
+         <DraftNotice ready={localDraft.ready} hasDraft={localDraft.hasDraft} restored={localDraft.restored} storageAvailable={localDraft.storageAvailable} />
+ 
+         {/* Profile questions — same wording and order as Google Forms */}
+-        <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
++        <section id="question-role" className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
+           <h3 className="text-[17px] font-bold text-zinc-900">Are you a Student or Teacher? *</h3>
+           <div className="mt-4 grid grid-cols-2 gap-3">
+             {ROLE_OPTIONS.map((option) => {
+@@ -289,7 +302,7 @@ export default function Form2Page() {
+           </div>
+         </section>
+ 
+-        <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
++        <section id="question-department" className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
+           <h3 className="text-[17px] font-bold text-zinc-900">Which Department do you belong to? *</h3>
+           <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+             {FORM2_DEPARTMENT_OPTIONS.map((option) => {
+@@ -373,15 +386,23 @@ export default function Form2Page() {
+           </div>
+         ) : null}
+ 
++        {showIncomplete && !canSubmit ? (
++          <div role="alert" className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-900">
++            Please answer every required question ({Math.max(1, total - answered)} left). We scrolled you to the first one. / অনুগ্রহ করে সব প্রশ্নের উত্তর দিন।
++          </div>
++        ) : null}
++
+         {/* Submit */}
+         <div className="mt-8 space-y-3">
+           <button
+             type="button"
+             onClick={submit}
+-            disabled={!localDraft.ready || !canSubmit || loading || submitted}
+-            className="w-full rounded-[24px] bg-black py-5 text-lg font-black text-white shadow-xl transition-all hover:bg-zinc-800 disabled:opacity-40 disabled:hover:bg-black"
++            disabled={!localDraft.ready || loading || submitted}
++            aria-busy={loading}
++            aria-disabled={!canSubmit}
++            className={`w-full rounded-[24px] bg-black py-5 text-lg font-black text-white shadow-xl transition-all hover:bg-zinc-800 disabled:cursor-wait disabled:opacity-70 disabled:hover:bg-black ${canSubmit ? "" : "opacity-50"}`}
+           >
+-            {loading ? "Submitting Ratings…" : `Submit Ratings (${answered}/${total})`}
++            {loading ? <><span className="btn-spinner" aria-hidden="true" />Submitting Ratings…</> : `Submit Ratings (${answered}/${total})`}
+           </button>
+           <div className="flex items-center justify-center gap-2 text-xs text-zinc-400">
+             <span>🔒 Fully anonymous</span>
+diff --git a/src/app/globals.css b/src/app/globals.css
+index 9755f3e..8832225 100644
+--- a/src/app/globals.css
++++ b/src/app/globals.css
+@@ -192,7 +192,7 @@ html.dark ::selection { background: #6d4fd1; color: #fff; }
+ .research-card-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 15px; }
+ .research-card-tags > span { display: inline-flex; gap: 5px; align-items: center; border-radius: 6px; background: var(--home-soft); padding: 5px 8px; color: var(--home-text); font-size: 10px; font-weight: 550; }
+ .research-card-action { padding-top: 22px; margin-top: auto; }
+-.research-open-button { min-height: 47px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid transparent; border-radius: 11px; background: var(--button-bg); color: #fff; font-size: 14px; font-weight: 700; text-decoration: none; box-shadow: 0 3px 6px #29243b10; transition: background .15s, box-shadow .15s; }
++.research-open-button { min-height: 47px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid transparent; border-radius: 11px; background: var(--button-bg); color: #fff; font-size: 14px; font-weight: 700; text-decoration: none; box-shadow: 0 3px 6px #29243b10; transition: background .15s, box-shadow .15s, scale .12s ease; }
+ .research-open-button:hover { background: color-mix(in srgb, var(--button-bg) 86%, #000); box-shadow: 0 5px 14px color-mix(in srgb, var(--button-bg) 20%, transparent); }
+ .research-open-button svg { transition: transform .15s; }
+ .research-open-button:hover svg { transform: translateX(4px); }
+@@ -283,3 +283,48 @@ html.dark ::selection { background: #6d4fd1; color: #fff; }
+ @media (prefers-reduced-motion: reduce) {
+   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+ }
++
++/* ---------- Interaction feedback & navigation state ---------- */
++/* Remove the legacy 300ms tap delay and give every enabled button an immediate pressed state. */
++button, a[href], [role="button"], summary { touch-action: manipulation; }
++button:not(:disabled):active,
++.nav-link:active { scale: .975; }
++button:disabled { cursor: not-allowed; }
++.nav-link, button { -webkit-tap-highlight-color: rgb(124 92 255 / .18); }
++
++/* Top progress bar: starts in the same frame as the click (see NavigationProgress). */
++html[data-nav="loading"] body::before {
++  content: ""; position: fixed; top: 0; left: 0; z-index: 9999; height: 3px; width: 0;
++  background: linear-gradient(90deg, #7c5cff, #4f46e5, #22b8cf);
++  box-shadow: 0 0 10px rgb(124 92 255 / .6);
++  pointer-events: none;
++  animation: nav-progress 8s cubic-bezier(.1, .6, .2, 1) forwards;
++}
++@keyframes nav-progress { 0% { width: 0; } 12% { width: 35%; } 100% { width: 92%; } }
++
++/* In-button pending overlay (only shows if navigation takes longer than ~120ms). */
++.nav-pending { display: none; }
++.nav-pending[data-pending="true"] {
++  display: grid; place-items: center; position: absolute; inset: 0; border-radius: inherit;
++  background: rgb(15 23 42 / .22); pointer-events: none; opacity: 0;
++  animation: nav-pending-in .15s ease 120ms forwards;
++}
++.nav-pending[data-pending="true"]::after {
++  content: ""; width: 16px; height: 16px; border-radius: 999px;
++  border: 2px solid rgb(255 255 255 / .45); border-top-color: #fff;
++  animation: nav-spin .7s linear infinite;
++}
++@keyframes nav-pending-in { to { opacity: 1; } }
++@keyframes nav-spin { to { transform: rotate(360deg); } }
++
++/* Async-action spinner used inside submit/refresh buttons. */
++.btn-spinner {
++  display: inline-block; width: 1em; height: 1em; margin-right: .5em; vertical-align: -.15em; border-radius: 999px;
++  border: 2px solid currentColor; border-right-color: transparent; animation: nav-spin .7s linear infinite;
++}
++
++@media (prefers-reduced-motion: reduce) {
++  button:not(:disabled):active, .nav-link:active { scale: 1; }
++  html[data-nav="loading"] body::before { animation-duration: 0s; width: 60%; }
++  .nav-pending[data-pending="true"]::after, .btn-spinner { animation-duration: 1.6s; }
++}
+diff --git a/src/app/layout.tsx b/src/app/layout.tsx
+index 7ce7daf..458369a 100644
+--- a/src/app/layout.tsx
++++ b/src/app/layout.tsx
+@@ -1,6 +1,7 @@
+ import type { Metadata } from "next";
+ import type { ReactNode } from "react";
+ import ThemeToggle from "@/components/ThemeToggle";
++import NavigationProgress from "@/components/NavigationProgress";
+ import ParticipationProvider from "@/components/ParticipationProvider";
+ import "./globals.css";
+ 
+@@ -19,6 +20,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
+     <html lang="bn" className="dark" suppressHydrationWarning>
+       <head><script dangerouslySetInnerHTML={{ __html: themeScript }} /></head>
+       <body className="min-h-screen antialiased">
++        <NavigationProgress />
+         <ParticipationProvider>{children}</ParticipationProvider>
+         <ThemeToggle />
+       </body>
+diff --git a/src/app/page.tsx b/src/app/page.tsx
+index 19c4945..e0c3717 100644
+--- a/src/app/page.tsx
++++ b/src/app/page.tsx
+@@ -1,5 +1,5 @@
+ import RotatingHeadline from "@/components/RotatingHeadline";
+-import Link from "next/link";
++import NavLink from "@/components/NavLink";
+ import {
+   ArrowDown,
+   ArrowRight,
+@@ -16,6 +16,7 @@ import {
+   Sparkles,
+   UsersRound,
+ } from "lucide-react";
++import { preload } from "react-dom";
+ import fs from "node:fs";
+ import path from "node:path";
+ import PollStatsWarmup from "@/components/PollStatsWarmup";
+@@ -46,8 +47,11 @@ function getMediaAssets() {
+   return { videoSrc, posterSrc };
+ }
+ 
+-export const dynamic = "force-dynamic";
+-
++// Home is statically generated at build time (the media lookup below reads the
++// build's public/assets folder). A static route is served from the CDN with no
++// serverless/database work and, crucially, can be FULLY prefetched by <Link>, so
++// returning Home is an instant client-side transition. All live data on this page
++// (participant counts, results) is fetched client-side after paint.
+ export const metadata = {
+   title: "Fairness-Aware AI Routine Generator · Research Project",
+   description:
+@@ -56,6 +60,10 @@ export const metadata = {
+ 
+ export default function Home() {
+   const { videoSrc, posterSrc } = getMediaAssets();
++  // Serve a right-sized optimized poster (the original JPEG is ~620 KB) and hint the
++  // browser to fetch it first, since it is the largest contentful element.
++  const optimizedPoster = `/_next/image?url=${encodeURIComponent(posterSrc)}&w=640&q=75`;
++  preload(optimizedPoster, { as: "image", fetchPriority: "high" });
+ 
+   return (
+     <div className="research-site">
+@@ -64,13 +72,13 @@ export default function Home() {
+ 
+       <header className="research-header">
+         <div className="research-container research-header-inner">
+-          <Link href="/" className="research-brand" aria-label="Fairness-Aware AI Routine Generator — home">
++          <NavLink href="/" className="research-brand" aria-label="Fairness-Aware AI Routine Generator — home">
+             <span className="research-brand-icon"><Layers3 size={23} strokeWidth={1.8} /></span>
+             <span>
+               <span className="research-brand-name">Fairness-Aware AI Routine Generator</span>
+               <span className="research-brand-caption">Research Project</span>
+             </span>
+-          </Link>
++          </NavLink>
+           <nav className="research-navigation" aria-label="Main navigation">
+             <a href="#about" className="research-nav-about">About the research</a>
+             <a
+@@ -82,9 +90,9 @@ export default function Home() {
+               <span>Live Participants</span>
+               <ArrowDown size={14} />
+             </a>
+-            <Link href="/results/form1" className="research-results-link">
++            <NavLink href="/results/form1" className="research-results-link">
+               <BarChart3 size={16} /> <span>Live results</span> <ArrowUpRight size={14} />
+-            </Link>
++            </NavLink>
+           </nav>
+         </div>
+       </header>
+@@ -110,8 +118,8 @@ export default function Home() {
+                 <video
+                   controls
+                   playsInline
+-                  preload="metadata"
+-                  poster={posterSrc}
++                  preload="none"
++                  poster={optimizedPoster}
+                   className="research-video-player"
+                   aria-label="Fairness-Aware AI Routine Generator promotional video"
+                 >
+@@ -135,9 +143,9 @@ export default function Home() {
+                 <div className="research-card-tags"><span><UsersRound size={13} /> Students &amp; teachers</span><span>Bangla + English</span></div>
+ 
+                 <div className="research-card-action">
+-                  <Link href="/form1" className="research-open-button" aria-label="Open Form 1 — Student and Teacher Survey">
++                  <NavLink href="/form1" className="research-open-button" aria-label="Open Form 1 — Student and Teacher Survey">
+                     <span>Open Form 1</span><ArrowRight size={19} />
+-                  </Link>
++                  </NavLink>
+                   <span className="research-card-note"><ShieldCheck size={13} /> No account needed</span>
+                 </div>
+               </article>
+@@ -154,9 +162,9 @@ export default function Home() {
+                 <div className="research-card-tags"><span><Clock3 size={13} /> 7 time slots</span><span>1–5 rating scale</span></div>
+ 
+                 <div className="research-card-action">
+-                  <Link href="/form2" className="research-open-button" aria-label="Open Form 2 — Time-Slot Rating Survey">
++                  <NavLink href="/form2" className="research-open-button" aria-label="Open Form 2 — Time-Slot Rating Survey">
+                     <span>Open Form 2</span><ArrowRight size={19} />
+-                  </Link>
++                  </NavLink>
+                   <span className="research-card-note"><ShieldCheck size={13} /> No account needed</span>
+                 </div>
+               </article>
+diff --git a/src/app/results/form1/page.tsx b/src/app/results/form1/page.tsx
+index 375d7bc..b541832 100644
+--- a/src/app/results/form1/page.tsx
++++ b/src/app/results/form1/page.tsx
+@@ -1,4 +1,4 @@
+-import Link from "next/link";
++import NavLink from "@/components/NavLink";
+ import HomeButton from "@/components/HomeButton";
+ import RefreshButton from "@/components/RefreshButton";
+ import { DistributionCard, StatTile } from "@/components/ResultCards";
+@@ -21,12 +21,12 @@ export default async function Form1ResultsPage() {
+       <div className="flex flex-wrap items-center justify-between gap-3">
+         <HomeButton />
+         <div className="flex flex-wrap items-center gap-2">
+-          <Link
++          <NavLink
+             href="/results/form2"
+             className="rounded-full border border-zinc-300 bg-white px-4 py-2 text-xs font-semibold text-zinc-700 hover:border-zinc-500"
+           >
+             Form 2 results →
+-          </Link>
++          </NavLink>
+           <RefreshButton />
+         </div>
+       </div>
+@@ -54,9 +54,9 @@ export default async function Form1ResultsPage() {
+           {data.totalResponses === 0 ? (
+             <div className="mt-8 rounded-2xl border border-dashed border-zinc-300 bg-white p-8 text-center text-sm text-zinc-500">
+               No responses yet.{" "}
+-              <Link href="/form1" className="font-semibold text-violet-700">
++              <NavLink href="/form1" className="font-semibold text-violet-700">
+                 Be the first to answer Form 1 →
+-              </Link>
++              </NavLink>
+             </div>
+           ) : (
+             <div className="mt-8 grid gap-4 lg:grid-cols-2">
+diff --git a/src/app/results/form2/page.tsx b/src/app/results/form2/page.tsx
+index 14a0653..3b085c1 100644
+--- a/src/app/results/form2/page.tsx
++++ b/src/app/results/form2/page.tsx
+@@ -1,4 +1,4 @@
+-import Link from "next/link";
++import NavLink from "@/components/NavLink";
+ import HomeButton from "@/components/HomeButton";
+ import RefreshButton from "@/components/RefreshButton";
+ import { BarRow, RatingCard, StatTile } from "@/components/ResultCards";
+@@ -23,12 +23,12 @@ export default async function Form2ResultsPage() {
+       <div className="flex flex-wrap items-center justify-between gap-3">
+         <HomeButton />
+         <div className="flex flex-wrap items-center gap-2">
+-          <Link
++          <NavLink
+             href="/results/form1"
+             className="rounded-full border border-zinc-300 bg-white px-4 py-2 text-xs font-semibold text-zinc-700 hover:border-zinc-500"
+           >
+             Form 1 results →
+-          </Link>
++          </NavLink>
+           <RefreshButton />
+         </div>
+       </div>
+@@ -65,9 +65,9 @@ export default async function Form2ResultsPage() {
+           {data.totalResponses === 0 ? (
+             <div className="mt-8 rounded-2xl border border-dashed border-zinc-300 bg-white p-8 text-center text-sm text-zinc-500">
+               No responses yet.{" "}
+-              <Link href="/form2" className="font-semibold text-violet-700">
++              <NavLink href="/form2" className="font-semibold text-violet-700">
+                 Be the first to rate the time slots →
+-              </Link>
++              </NavLink>
+             </div>
+           ) : (
+             <>
+diff --git a/src/app/setup/page.tsx b/src/app/setup/page.tsx
+index c63a8ef..e537ea8 100644
+--- a/src/app/setup/page.tsx
++++ b/src/app/setup/page.tsx
+@@ -1,6 +1,6 @@
+ "use client";
+ 
+-import Link from "next/link";
++import NavLink from "@/components/NavLink";
+ import { useCallback, useEffect, useState } from "react";
+ import {
+   KeyRound,
+@@ -82,12 +82,12 @@ export default function AdminConsolePage() {
+     <main className="min-h-screen bg-[#f6f5f2] pb-16">
+       <div className="mx-auto max-w-3xl px-5 pt-8">
+         <div className="flex flex-wrap items-center justify-between gap-3">
+-          <Link
++          <NavLink
+             href="/"
+             className="flex items-center gap-1.5 text-sm font-semibold text-zinc-600 hover:text-zinc-900"
+           >
+             <Home className="h-4 w-4" /> Back to survey
+-          </Link>
++          </NavLink>
+           <span className="flex items-center gap-1.5 rounded-full border border-zinc-300 bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+             <ShieldCheck className="h-3.5 w-3.5" /> Administrator Console
+           </span>
+diff --git a/src/components/HomeButton.tsx b/src/components/HomeButton.tsx
+index 02bcb73..bfe4913 100644
+--- a/src/components/HomeButton.tsx
++++ b/src/components/HomeButton.tsx
+@@ -1,17 +1,21 @@
+-/* eslint-disable @next/next/no-html-link-for-pages -- A native link bypasses slow client-side route transitions to the fully static Home page. */
+ import { ArrowLeft, House } from "lucide-react";
++import NavLink from "@/components/NavLink";
+ 
+-/** A direct link to the static landing page, with no route-data wait. */
++/**
++ * Client-side link to the (statically generated, prefetched) landing page.
++ * The previous version was a raw <a href="/">, which forced a full document
++ * reload: re-download, re-parse, re-hydrate and a fresh server render on every click.
++ */
+ export default function HomeButton({ label = "Home" }: { label?: string }) {
+   return (
+-    <a
++    <NavLink
+       href="/"
+       aria-label="Return to the survey home page"
+-      className="inline-flex min-h-[46px] shrink-0 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-2.5 text-sm font-black text-white shadow-[0_8px_24px_-12px_rgba(104,67,201,.75)] transition-transform hover:-translate-y-0.5 hover:from-violet-500 hover:to-indigo-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-violet-300 dark:focus-visible:ring-violet-500/50 sm:px-5 sm:text-[15px]"
++      className="inline-flex min-h-[46px] shrink-0 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-2.5 text-sm font-black text-white shadow-[0_8px_24px_-12px_rgba(104,67,201,.75)] transition-[transform,translate,scale,box-shadow,background-image] duration-150 hover:-translate-y-0.5 hover:from-violet-500 hover:to-indigo-500 active:translate-y-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-violet-300 dark:focus-visible:ring-violet-500/50 sm:px-5 sm:text-[15px]"
+     >
+       <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+       <House className="h-4 w-4" aria-hidden="true" />
+       <span>{label}</span>
+-    </a>
++    </NavLink>
+   );
+ }
+diff --git a/src/components/LiveParticipationCard.tsx b/src/components/LiveParticipationCard.tsx
+index f0e047d..c0bc6ac 100644
+--- a/src/components/LiveParticipationCard.tsx
++++ b/src/components/LiveParticipationCard.tsx
+@@ -1,6 +1,6 @@
+ "use client";
+ 
+-import Link from "next/link";
++import NavLink from "@/components/NavLink";
+ import { useState } from "react";
+ import { ArrowUpRight, Check, CheckCircle2, Radio, RefreshCw, ShieldCheck, UsersRound } from "lucide-react";
+ import { useParticipation } from "@/components/ParticipationProvider";
+@@ -81,7 +81,7 @@ export default function LiveParticipationCard() {
+ 
+       <div className="participation-card-footer">
+         <span><ShieldCheck size={14} /> Drafts stay on your device. Only submitted answers count.</span>
+-        <Link href={filter === "form2" ? "/results/form2" : "/results/form1"}>Live Dashboard <ArrowUpRight size={14} /></Link>
++        <NavLink href={filter === "form2" ? "/results/form2" : "/results/form1"}>Live Dashboard <ArrowUpRight size={14} /></NavLink>
+       </div>
+     </section>
+   );
+diff --git a/src/components/NavLink.tsx b/src/components/NavLink.tsx
+new file mode 100644
+index 0000000..7eb2c9f
+--- /dev/null
++++ b/src/components/NavLink.tsx
+@@ -0,0 +1,55 @@
++"use client";
++
++import Link, { useLinkStatus } from "next/link";
++import { useRef, type ComponentProps, type MouseEvent } from "react";
++
++/**
++ * Rendered inside <Link>. `useLinkStatus` flips to pending the instant the click
++ * starts a client navigation and flips back by itself when the route commits (or
++ * fails), so there is no state of ours that can get stuck. The overlay fades in
++ * after a short delay (see globals.css) so already-prefetched, near-instant
++ * navigations never flash a spinner.
++ */
++function PendingOverlay() {
++  const { pending } = useLinkStatus();
++  return <span aria-hidden="true" className="nav-pending" data-pending={pending ? "true" : "false"} />;
++}
++
++// A second click this soon after the first is the same intent, not a new one.
++const DUPLICATE_CLICK_WINDOW_MS = 900;
++
++type NavLinkProps = Omit<ComponentProps<typeof Link>, "href"> & { href: string };
++
++/**
++ * Drop-in replacement for next/link used for every in-app navigation button:
++ *  - client-side navigation with Next's default viewport prefetching,
++ *  - pressed-state feedback (CSS `.nav-link:active`),
++ *  - pending overlay + global top progress bar (NavigationProgress),
++ *  - repeated clicks are ignored for a very short window (time based, so the
++ *    link is never left disabled if a navigation is slow or fails).
++ */
++export default function NavLink({ className = "", onClick, children, ...props }: NavLinkProps) {
++  const lastClick = useRef(0);
++  // Overlay needs a positioned parent; never override an explicit positioning class.
++  const positioned = /(^|\s)(absolute|fixed|sticky|relative)(\s|$)/.test(className);
++
++  const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
++    onClick?.(event);
++    if (event.defaultPrevented) return;
++    const plain = event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
++    if (!plain) return; // let the browser open new tabs/windows normally
++    const now = Date.now();
++    if (now - lastClick.current < DUPLICATE_CLICK_WINDOW_MS) {
++      event.preventDefault();
++      return;
++    }
++    lastClick.current = now;
++  };
++
++  return (
++    <Link {...props} onClick={handleClick} className={`nav-link ${positioned ? "" : "relative "}${className}`}>
++      {children}
++      <PendingOverlay />
++    </Link>
++  );
++}
+diff --git a/src/components/NavigationProgress.tsx b/src/components/NavigationProgress.tsx
+new file mode 100644
+index 0000000..95b28d5
+--- /dev/null
++++ b/src/components/NavigationProgress.tsx
+@@ -0,0 +1,50 @@
++"use client";
++
++import { useEffect } from "react";
++import { usePathname } from "next/navigation";
++
++const SAFETY_TIMEOUT_MS = 10_000;
++
++/**
++ * Lightweight top progress bar for in-app navigation. It never re-renders React:
++ * a capture-phase click listener sets `data-nav="loading"` on <html> in the same
++ * frame as the click, and the route change (pathname) clears it. A timeout and
++ * pageshow handler guarantee it can never stay stuck. Styling lives in globals.css.
++ */
++export default function NavigationProgress() {
++  const pathname = usePathname();
++
++  useEffect(() => {
++    const root = document.documentElement;
++    let timer = 0;
++    const stop = () => {
++      window.clearTimeout(timer);
++      delete root.dataset.nav;
++    };
++    const onClick = (event: MouseEvent) => {
++      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
++      const anchor = (event.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
++      if (!anchor || (anchor.target && anchor.target !== "_self") || anchor.hasAttribute("download")) return;
++      const url = new URL(anchor.href, window.location.href);
++      if (url.origin !== window.location.origin) return;
++      if (url.pathname === window.location.pathname) return; // hash jumps / same page
++      window.clearTimeout(timer);
++      root.dataset.nav = "loading";
++      timer = window.setTimeout(stop, SAFETY_TIMEOUT_MS);
++    };
++    document.addEventListener("click", onClick, true);
++    window.addEventListener("pageshow", stop);
++    return () => {
++      document.removeEventListener("click", onClick, true);
++      window.removeEventListener("pageshow", stop);
++      stop();
++    };
++  }, []);
++
++  // The new route has committed: finish the bar.
++  useEffect(() => {
++    delete document.documentElement.dataset.nav;
++  }, [pathname]);
++
++  return null;
++}
+diff --git a/src/components/ParticipationProvider.tsx b/src/components/ParticipationProvider.tsx
+index 369c3b0..1861a1d 100644
+--- a/src/components/ParticipationProvider.tsx
++++ b/src/components/ParticipationProvider.tsx
+@@ -1,6 +1,6 @@
+ "use client";
+ 
+-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
++import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+ import { usePathname } from "next/navigation";
+ import { getBrowserId, SUBMISSION_EVENT } from "@/lib/browser";
+ import { HEARTBEAT_INTERVAL_MS, PARTICIPATION_POLL_MS, type ParticipationSnapshot, type PresenceScope } from "@/lib/participation";
+@@ -25,57 +25,98 @@ function scopeFor(path: string): PresenceScope | null {
+   return path === "/" ? "home" : null;
+ }
+ 
+-/** Shares one aggregate refresh loop and one heartbeat across the public site. */
++// Only these pages actually render participation counters. The survey forms need
++// presence (so they are counted as live) but never display the snapshot, so they
++// must not poll the aggregate endpoint every few seconds while someone is answering.
++const SNAPSHOT_PATHS = new Set(["/", "/results/form1", "/results/form2"]);
++
++/** Run low-priority work after the browser is idle so it never competes with navigation or hydration. */
++function whenIdle(task: () => void, timeout = 1500): () => void {
++  if (typeof window.requestIdleCallback === "function") {
++    const id = window.requestIdleCallback(task, { timeout });
++    return () => window.cancelIdleCallback(id);
++  }
++  const id = window.setTimeout(task, 150);
++  return () => window.clearTimeout(id);
++}
++
++/**
++ * Shares one aggregate refresh loop and one presence heartbeat across the public site.
++ * The provider lives in the root layout, so it (and its last snapshot) survives
++ * client-side navigation; a route change only updates the presence scope.
++ */
+ export default function ParticipationProvider({ children }: { children: ReactNode }) {
+   const pathname = usePathname();
+   const scope = scopeFor(pathname);
++  const wantsSnapshot = SNAPSHOT_PATHS.has(pathname);
+   const [snapshot, setSnapshot] = useState<ParticipationSnapshot | null>(null);
+   const [status, setStatus] = useState<ConnectionStatus>("connecting");
+ 
+-  const refresh = useCallback(async () => {
+-    try {
+-      const response = await fetch("/api/participation", { cache: "no-store" });
+-      if (!response.ok) throw new Error("Connection unavailable");
+-      const data = await response.json() as ParticipationSnapshot;
+-      if (!data.live || !data.submitted || typeof data.live.total !== "number" || typeof data.submitted.total !== "number") {
+-        throw new Error("Invalid participation data");
++  const scopeRef = useRef<PresenceScope | null>(scope);
++  const sessionRef = useRef("");
++  const lastSentScope = useRef<PresenceScope | null>(null);
++  const inflightRefresh = useRef<Promise<void> | null>(null);
++  const inflightBeat = useRef<Promise<boolean> | null>(null);
++
++  /** One GET at a time; concurrent callers (poll, focus, submit, heartbeat) share it. */
++  const refresh = useCallback((): Promise<void> => {
++    if (inflightRefresh.current) return inflightRefresh.current;
++    const request = (async () => {
++      try {
++        const response = await fetch("/api/participation", { cache: "no-store" });
++        if (!response.ok) throw new Error("Connection unavailable");
++        const data = await response.json() as ParticipationSnapshot;
++        if (!data.live || !data.submitted || typeof data.live.total !== "number" || typeof data.submitted.total !== "number") {
++          throw new Error("Invalid participation data");
++        }
++        setSnapshot(data);
++        setStatus("live");
++      } catch {
++        // Retain the last acknowledged values, never substitute invented counts.
++        setStatus("reconnecting");
++      } finally {
++        inflightRefresh.current = null;
+       }
+-      setSnapshot(data);
+-      setStatus("live");
+-    } catch {
+-      // Retain the last acknowledged values, never substitute invented counts.
+-      setStatus("reconnecting");
+-    }
++    })();
++    inflightRefresh.current = request;
++    return request;
+   }, []);
+ 
+-  useEffect(() => {
+-    if (!scope) return;
+-    const browserId = getBrowserId();
+-    // Each tab/route lifetime has its own token. A late leave cannot remove a new
+-    // tab or route, and aggregates deduplicate all sessions by the browser ID.
+-    const sessionId = typeof crypto.randomUUID === "function"
+-      ? crypto.randomUUID()
+-      : `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+-    let alive = true;
+-    let pending = false;
+-    const heartbeat = async () => {
+-      if (!alive || pending || document.hidden || !navigator.onLine) return;
+-      pending = true;
++  /** Presence heartbeat (never blocks UI; deduplicated while one is in flight). */
++  const heartbeat = useCallback((): Promise<boolean> => {
++    const scopeNow = scopeRef.current;
++    if (!scopeNow || document.hidden || !navigator.onLine || !sessionRef.current) return Promise.resolve(false);
++    if (inflightBeat.current) return inflightBeat.current;
++    const request = (async () => {
+       try {
+         const response = await fetch("/api/participation", {
+           method: "POST",
+           headers: { "Content-Type": "application/json" },
+-          body: JSON.stringify({ browserId, sessionId, scope, action: "heartbeat" }),
++          body: JSON.stringify({ browserId: getBrowserId(), sessionId: sessionRef.current, scope: scopeNow, action: "heartbeat" }),
+           keepalive: true,
+         });
+         if (!response.ok) throw new Error("Presence unavailable");
+-        if (alive) await refresh();
++        lastSentScope.current = scopeNow;
++        return true;
+       } catch {
+-        if (alive) setStatus("reconnecting");
++        setStatus("reconnecting");
++        return false;
+       } finally {
+-        pending = false;
++        inflightBeat.current = null;
+       }
+-    };
++    })();
++    inflightBeat.current = request;
++    return request;
++  }, []);
++
++  // Presence lifecycle: ONE session per tab. A route change only changes `scope`,
++  // so there is no leave/re-join churn while navigating between pages.
++  useEffect(() => {
++    sessionRef.current = typeof crypto.randomUUID === "function"
++      ? crypto.randomUUID()
++      : `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
++    const browserId = getBrowserId();
++    const sessionId = sessionRef.current;
+     const leave = () => {
+       const payload = JSON.stringify({ browserId, sessionId, action: "leave" });
+       if (navigator.sendBeacon?.("/api/participation", new Blob([payload], { type: "application/json" }))) return;
+@@ -83,34 +124,49 @@ export default function ParticipationProvider({ children }: { children: ReactNod
+         method: "POST", headers: { "Content-Type": "application/json" }, body: payload, keepalive: true,
+       }).catch(() => {});
+     };
++    const resume = () => { void heartbeat(); };
+     const visibilityChanged = () => {
+       if (document.hidden) leave();
+-      else void heartbeat();
++      else resume();
+     };
+-    const online = () => { void heartbeat(); };
+-    void heartbeat();
+-    const timer = window.setInterval(() => { void heartbeat(); }, HEARTBEAT_INTERVAL_MS);
++    const timer = window.setInterval(resume, HEARTBEAT_INTERVAL_MS);
+     window.addEventListener("pagehide", leave);
+-    window.addEventListener("pageshow", online);
+-    window.addEventListener("online", online);
+-    window.addEventListener("focus", online);
++    window.addEventListener("pageshow", resume);
++    window.addEventListener("online", resume);
++    window.addEventListener("focus", resume);
+     document.addEventListener("visibilitychange", visibilityChanged);
+     return () => {
+-      alive = false;
+       window.clearInterval(timer);
+       window.removeEventListener("pagehide", leave);
+-      window.removeEventListener("pageshow", online);
+-      window.removeEventListener("online", online);
+-      window.removeEventListener("focus", online);
++      window.removeEventListener("pageshow", resume);
++      window.removeEventListener("online", resume);
++      window.removeEventListener("focus", resume);
+       document.removeEventListener("visibilitychange", visibilityChanged);
+       leave();
++      sessionRef.current = "";
++      lastSentScope.current = null;
+     };
+-  }, [scope, refresh]);
++  }, [heartbeat]);
+ 
++  // Scope / page change: register the new scope (only if it changed) and, on pages
++  // that show counters, take one snapshot. Deferred to idle time so it never delays
++  // the navigation that triggered it. This replaces the old double POST+GET+GET burst.
+   useEffect(() => {
++    scopeRef.current = scope;
+     if (!scope) return;
++    return whenIdle(() => {
++      if (document.hidden) return;
++      void (async () => {
++        if (lastSentScope.current !== scope) await heartbeat();
++        if (wantsSnapshot) await refresh();
++      })();
++    });
++  }, [scope, wantsSnapshot, heartbeat, refresh]);
++
++  // Live counter polling: only while a page that displays the counters is visible.
++  useEffect(() => {
++    if (!wantsSnapshot) return;
+     const update = () => { if (!document.hidden) void refresh(); };
+-    update();
+     const timer = window.setInterval(update, PARTICIPATION_POLL_MS);
+     window.addEventListener(SUBMISSION_EVENT, update);
+     window.addEventListener("storage", update);
+@@ -123,7 +179,8 @@ export default function ParticipationProvider({ children }: { children: ReactNod
+       window.removeEventListener("focus", update);
+       document.removeEventListener("visibilitychange", update);
+     };
+-  }, [scope, refresh]);
++  }, [wantsSnapshot, refresh]);
+ 
+-  return <ParticipationContext.Provider value={{ snapshot, status, refresh }}>{children}</ParticipationContext.Provider>;
++  const value = useMemo(() => ({ snapshot, status, refresh }), [snapshot, status, refresh]);
++  return <ParticipationContext.Provider value={value}>{children}</ParticipationContext.Provider>;
+ }
+diff --git a/src/components/PollStatsWarmup.tsx b/src/components/PollStatsWarmup.tsx
+index 43ac4ff..566aab7 100644
+--- a/src/components/PollStatsWarmup.tsx
++++ b/src/components/PollStatsWarmup.tsx
+@@ -3,17 +3,47 @@
+ import { useEffect } from "react";
+ import { preloadPollStats } from "@/lib/poll-stats-client";
+ 
++type NetworkInformation = { saveData?: boolean; effectiveType?: string };
++
+ /**
+- * Fetch aggregate-only poll snapshots after the landing page paints. The requests
+- * never block Home or navigation, and both forms can reuse the cached response.
++ * Warm the aggregate poll snapshots so Form 1 / Form 2 open with results ready.
++ * This is strictly optional background work, so it:
++ *  - waits for the page's own load event (never competes with JS/CSS/poster),
++ *  - then waits for an idle moment,
++ *  - fetches the two forms one after the other (each is a full-table read),
++ *  - is skipped entirely on Data Saver / 2G connections.
++ * Both calls are deduplicated and cached by `preloadPollStats`.
+  */
+ export default function PollStatsWarmup() {
+   useEffect(() => {
+-    const timer = window.setTimeout(() => {
+-      void preloadPollStats("form1").catch(() => {});
+-      void preloadPollStats("form2").catch(() => {});
+-    }, 100);
+-    return () => window.clearTimeout(timer);
++    const connection = (navigator as Navigator & { connection?: NetworkInformation }).connection;
++    if (connection?.saveData || /(^|-)2g$/.test(connection?.effectiveType ?? "")) return;
++
++    let cancelled = false;
++    let cancelIdle = () => {};
++    const run = () => {
++      if (cancelled || document.hidden) return;
++      void preloadPollStats("form1")
++        .catch(() => {})
++        .then(() => (cancelled ? undefined : preloadPollStats("form2").catch(() => {})));
++    };
++    const schedule = () => {
++      if (typeof window.requestIdleCallback === "function") {
++        const id = window.requestIdleCallback(run, { timeout: 4000 });
++        cancelIdle = () => window.cancelIdleCallback(id);
++      } else {
++        const id = window.setTimeout(run, 1500);
++        cancelIdle = () => window.clearTimeout(id);
++      }
++    };
++
++    if (document.readyState === "complete") schedule();
++    else window.addEventListener("load", schedule, { once: true });
++    return () => {
++      cancelled = true;
++      cancelIdle();
++      window.removeEventListener("load", schedule);
++    };
+   }, []);
+   return null;
+ }
+diff --git a/src/components/RatingPoll.tsx b/src/components/RatingPoll.tsx
+index 39bd4e8..63474b2 100644
+--- a/src/components/RatingPoll.tsx
++++ b/src/components/RatingPoll.tsx
+@@ -52,7 +52,7 @@ export default function RatingPoll({
+   }
+ 
+   return (
+-    <section className="survey-card mb-6 rounded-[26px] border border-slate-200 bg-white p-5 shadow-[0_12px_36px_-28px_rgba(38,48,84,0.42)] sm:p-7 dark:border-slate-700 dark:bg-[#18233b]">
++    <section id={`question-${questionId}`} className="survey-card mb-6 rounded-[26px] border border-slate-200 bg-white p-5 shadow-[0_12px_36px_-28px_rgba(38,48,84,0.42)] sm:p-7 dark:border-slate-700 dark:bg-[#18233b]">
+       {visual && <div className="survey-visual mb-5">{visual}</div>}
+       <div className="flex items-start gap-3">
+         {index && <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-fuchsia-100 text-xs font-black text-fuchsia-700 dark:bg-fuchsia-500/20 dark:text-fuchsia-200">{index}</span>}
+diff --git a/src/components/RefreshButton.tsx b/src/components/RefreshButton.tsx
+index 7bf043c..89bde47 100644
+--- a/src/components/RefreshButton.tsx
++++ b/src/components/RefreshButton.tsx
+@@ -1,22 +1,21 @@
+ "use client";
+ 
+ import { useRouter } from "next/navigation";
+-import { useState } from "react";
++import { useTransition } from "react";
+ 
++/** Busy state is tied to the real router refresh (not a fake timer), so it can't stick or lie. */
+ export default function RefreshButton() {
+   const router = useRouter();
+-  const [busy, setBusy] = useState(false);
++  const [pending, startTransition] = useTransition();
+   return (
+     <button
+       type="button"
+-      onClick={() => {
+-        setBusy(true);
+-        router.refresh();
+-        setTimeout(() => setBusy(false), 600);
+-      }}
+-      className="rounded-full border border-zinc-300 bg-white px-4 py-2 text-xs font-semibold text-zinc-700 transition hover:border-zinc-500"
++      onClick={() => startTransition(() => router.refresh())}
++      disabled={pending}
++      aria-busy={pending}
++      className="rounded-full border border-zinc-300 bg-white px-4 py-2 text-xs font-semibold text-zinc-700 transition hover:border-zinc-500 active:bg-zinc-100 disabled:cursor-wait disabled:opacity-80"
+     >
+-      {busy ? "Refreshing…" : "↻ Refresh"}
++      {pending ? <><span className="btn-spinner" aria-hidden="true" />Refreshing…</> : "↻ Refresh"}
+     </button>
+   );
+ }
+diff --git a/src/components/ResponseCounters.tsx b/src/components/ResponseCounters.tsx
+index fa951d8..a47ed72 100644
+--- a/src/components/ResponseCounters.tsx
++++ b/src/components/ResponseCounters.tsx
+@@ -1,6 +1,6 @@
+ "use client";
+ 
+-import Link from "next/link";
++import NavLink from "@/components/NavLink";
+ import { ArrowUpRight, BarChart3, UsersRound, Clock3 } from "lucide-react";
+ import { useParticipation } from "@/components/ParticipationProvider";
+ 
+@@ -24,10 +24,10 @@ export default function ResponseCounters() {
+         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200"><Clock3 className="h-5 w-5" /></span>
+         <span><span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Time-slot ratings</span><span className="mt-0.5 block text-xl font-black text-slate-950 dark:text-white" aria-live="polite">{number(counts?.form2)} <span className="text-xs font-medium text-slate-500 dark:text-slate-400">responses</span></span></span>
+       </div>
+-      <Link href="/results/form2" className="col-span-2 flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-3.5 transition hover:border-violet-400 dark:border-slate-700 dark:bg-[#18243b] dark:hover:border-violet-400 md:col-span-1">
++      <NavLink href="/results/form2" className="col-span-2 flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-3.5 transition hover:border-violet-400 dark:border-slate-700 dark:bg-[#18243b] dark:hover:border-violet-400 md:col-span-1">
+         <span className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200"><BarChart3 className="h-5 w-5" /></span><span><span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Explore insights</span><span className="text-sm font-black text-slate-900 dark:text-white">View time-slot rankings</span></span></span>
+         <ArrowUpRight className="h-4 w-4 text-violet-600 dark:text-violet-300" />
+-      </Link>
++      </NavLink>
+     </div>
+   );
+ }
+diff --git a/src/components/TimeSlotMatrix.tsx b/src/components/TimeSlotMatrix.tsx
+index 1102ec9..8faf2e4 100644
+--- a/src/components/TimeSlotMatrix.tsx
++++ b/src/components/TimeSlotMatrix.tsx
+@@ -37,7 +37,7 @@ export default function TimeSlotMatrix({ values, onChange, initialStats, statsSt
+   }
+ 
+   return (
+-    <section className="survey-card mb-6 rounded-[26px] border border-slate-200 bg-white p-5 shadow-[0_12px_36px_-28px_rgba(38,48,84,0.42)] sm:p-7 dark:border-slate-700 dark:bg-[#18233b]">
++    <section id="question-time-slots" className="survey-card mb-6 rounded-[26px] border border-slate-200 bg-white p-5 shadow-[0_12px_36px_-28px_rgba(38,48,84,0.42)] sm:p-7 dark:border-slate-700 dark:bg-[#18233b]">
+       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-5 dark:border-slate-700">
+         <div>
+           <div className="flex items-center gap-2">
+diff --git a/src/lib/poll-stats-client.ts b/src/lib/poll-stats-client.ts
+index 6dc7e27..fc9b14c 100644
+--- a/src/lib/poll-stats-client.ts
++++ b/src/lib/poll-stats-client.ts
+@@ -1,6 +1,6 @@
+ "use client";
+ 
+-import { useEffect, useState } from "react";
++import { useEffect, useRef, useState } from "react";
+ import type { PollStats, PollStatsMap } from "@/lib/poll-stats";
+ 
+ export type { PollStats, PollStatsMap };
+@@ -77,6 +77,8 @@ export function preloadPollStats(form: SurveyForm, refresh = false): Promise<Pol
+ export function useSurveyPollStats(form: SurveyForm) {
+   const [stats, setStats] = useState<PollStatsMap>({});
+   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
++  // Skip React updates when a poll returns identical numbers (avoids re-rendering the whole survey every 6s).
++  const lastJson = useRef("");
+ 
+   useEffect(() => {
+     let active = true;
+@@ -85,6 +87,7 @@ export function useSurveyPollStats(form: SurveyForm) {
+     if (cached) {
+       queueMicrotask(() => {
+         if (!active) return;
++        lastJson.current = JSON.stringify(cached);
+         setStats(cached);
+         setStatus("ready");
+       });
+@@ -94,7 +97,11 @@ export function useSurveyPollStats(form: SurveyForm) {
+       void preloadPollStats(form, refresh)
+         .then((latest) => {
+           if (!active) return;
+-          setStats(latest); // always replace with the newest snapshot
++          const json = JSON.stringify(latest);
++          if (json !== lastJson.current) {
++            lastJson.current = json;
++            setStats(latest); // replace whenever the database numbers actually changed
++          }
+           setStatus("ready");
+         })
+         .catch(() => {
+diff --git a/src/lib/stats-cache.ts b/src/lib/stats-cache.ts
+index 22978c8..60b4565 100644
+--- a/src/lib/stats-cache.ts
++++ b/src/lib/stats-cache.ts
+@@ -1,31 +1,49 @@
+ type CacheEntry = { data: unknown; expiry: number };
+ 
+ const cache = new Map<string, CacheEntry>();
++const inflight = new Map<string, Promise<unknown>>();
+ 
+ /**
+  * Simple in-memory TTL cache used to keep server pages instant.
+  * On Vercel each lambda has its own copy — still cuts repeated DB hits to one per TTL window.
++ * Concurrent callers for the same key share ONE in-flight fetch (no thundering herd on Neon
++ * when many visitors poll the live endpoints at the same moment).
+  */
+ export async function cachedValue<T>(
+   key: string,
+   ttlMs: number,
+   fetcher: () => Promise<T>,
++  options: { staleOnError?: boolean } = {},
+ ): Promise<T> {
+   const now = Date.now();
+   const hit = cache.get(key);
+   if (hit && hit.expiry > now) return hit.data as T;
+-  try {
+-    const data = await fetcher();
+-    cache.set(key, { data, expiry: now + ttlMs });
+-    return data;
+-  } catch (err) {
+-    if (hit) return hit.data as T; // stale-while-error
+-    throw err;
+-  }
++  const running = inflight.get(key);
++  if (running) return running as Promise<T>;
++
++  const request = (async () => {
++    try {
++      const data = await fetcher();
++      cache.set(key, { data, expiry: Date.now() + ttlMs });
++      return data;
++    } catch (err) {
++      if (hit && options.staleOnError !== false) return hit.data as T; // stale-while-error
++      cache.delete(key);
++      throw err;
++    } finally {
++      inflight.delete(key);
++    }
++  })();
++  inflight.set(key, request);
++  return request;
+ }
+ 
+ export function invalidate(prefix: string): void {
+   for (const key of cache.keys()) {
+     if (key.startsWith(prefix)) cache.delete(key);
+   }
++  // A fetch that started before a submission may hold pre-submission data: don't share it.
++  for (const key of inflight.keys()) {
++    if (key.startsWith(prefix)) inflight.delete(key);
++  }
+ }

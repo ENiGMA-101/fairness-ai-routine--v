@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import NavLink from "@/components/NavLink";
+import { useEffect, useMemo, useRef, useState } from "react";
 import confetti from "canvas-confetti";
 import {
   GraduationCap,
@@ -19,6 +19,7 @@ import { FORM1_VISUALS } from "@/components/Visuals";
 import { useSurveyPollStats } from "@/lib/poll-stats-client";
 import { clearDraft, getBrowserId, isSubmitted, markSubmitted } from "@/lib/browser";
 import DraftNotice from "@/components/DraftNotice";
+import { focusSurveyQuestion } from "@/components/SurveyNavigator";
 import { EMPTY_FORM1_DRAFT, restoreForm1Draft, useLocalSurveyDraft } from "@/lib/local-draft";
 import {
   DEPARTMENT_OPTIONS,
@@ -39,6 +40,9 @@ export default function Form1Page() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showIncomplete, setShowIncomplete] = useState(false);
+  // Synchronous re-entry guard: a fast double click can never start two submissions.
+  const submittingRef = useRef(false);
   const { stats: batchStats, status: statsStatus } = useSurveyPollStats("form1");
   // Distinguishes a newly acknowledged submission from an earlier submission.
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
@@ -83,7 +87,15 @@ export default function Form1Page() {
     setAnswers((prev) => ({ ...prev, [id]: value }));
 
   const submit = async () => {
-    if (!localDraft.ready || !canSubmit || loading || submitted || isSubmitted("form1")) return;
+    if (submittingRef.current || !localDraft.ready || loading || submitted || isSubmitted("form1")) return;
+    if (!canSubmit) {
+      // Respond to the click: explain what is missing and jump to it (validation rules unchanged).
+      setShowIncomplete(true);
+      const firstMissing = !role ? "role" : !department ? "department" : (department === "Other" && !departmentOther.trim()) ? "department" : visible.find((q) => !answers[q.id])?.id;
+      if (firstMissing) focusSurveyQuestion(firstMissing);
+      return;
+    }
+    submittingRef.current = true;
     setLoading(true);
     setError("");
 
@@ -124,6 +136,7 @@ export default function Form1Page() {
     } catch {
       setError("সংযোগ পাওয়া যায়নি। আপনার উত্তর জমা হয়নি — পরে আবার চেষ্টা করুন। / Connection lost. Please retry.");
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   };
@@ -151,12 +164,12 @@ export default function Form1Page() {
             </p>
           </div>
           <div className="mt-6 space-y-3">
-            <Link
+            <NavLink
               href="/results/form1"
               className="flex items-center justify-center gap-2 w-full rounded-2xl bg-black py-3.5 text-sm font-bold text-white shadow-lg transition hover:bg-zinc-800"
             >
               <BarChart3 className="h-4 w-4" /> View Live Results
-            </Link>
+            </NavLink>
             <HomeButton label="Back to survey home" />
           </div>
         </div>
@@ -190,18 +203,18 @@ export default function Form1Page() {
           </div>
 
           <div className="mt-6 space-y-3">
-            <Link
+            <NavLink
               href="/form2"
               className="flex items-center justify-center gap-2 w-full rounded-2xl bg-violet-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-violet-500/25 transition hover:bg-violet-700"
             >
               Now submit Form 2 (Time-Slot Rating) <ArrowRight className="h-4 w-4" />
-            </Link>
-            <Link
+            </NavLink>
+            <NavLink
               href="/results/form1"
               className="flex items-center justify-center gap-2 w-full rounded-2xl border-2 border-zinc-200 bg-white py-3.5 text-sm font-bold text-zinc-800 transition hover:bg-zinc-50"
             >
               <BarChart3 className="h-4 w-4" /> View Live Form 1 Results
-            </Link>
+            </NavLink>
             <HomeButton label="Back to survey home" />
           </div>
         </div>
@@ -258,7 +271,7 @@ export default function Form1Page() {
         <DraftNotice ready={localDraft.ready} hasDraft={localDraft.hasDraft} restored={localDraft.restored} storageAvailable={localDraft.storageAvailable} />
 
         {/* Common profile questions — same wording and order as Google Forms */}
-        <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
+        <section id="question-role" className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
           <h3 className="text-[17px] font-bold text-zinc-900">Are you a Student or Teacher? *</h3>
           <div className="mt-5 grid grid-cols-2 gap-3">
             {ROLE_OPTIONS.map((option) => {
@@ -283,7 +296,7 @@ export default function Form1Page() {
           </div>
         </section>
 
-        <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
+        <section id="question-department" className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
           <h3 className="text-[17px] font-bold text-zinc-900">Which department do you belong to? *</h3>
           <div className="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
             {DEPARTMENT_OPTIONS.map((option) => {
@@ -374,15 +387,23 @@ export default function Form1Page() {
           </div>
         ) : null}
 
+        {showIncomplete && !canSubmit ? (
+          <div role="alert" className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-900">
+            Please answer every required question ({Math.max(1, total - answered)} left). We scrolled you to the first one. / অনুগ্রহ করে সব প্রশ্নের উত্তর দিন।
+          </div>
+        ) : null}
+
         {/* Submit Button */}
         <div className="mt-8 space-y-3">
           <button
             type="button"
             onClick={submit}
-            disabled={!localDraft.ready || !canSubmit || loading || submitted}
-            className="w-full rounded-[24px] bg-black py-5 text-lg font-black text-white shadow-xl transition-all hover:bg-zinc-800 disabled:opacity-40 disabled:hover:bg-black"
+            disabled={!localDraft.ready || loading || submitted}
+            aria-busy={loading}
+            aria-disabled={!canSubmit}
+            className={`w-full rounded-[24px] bg-black py-5 text-lg font-black text-white shadow-xl transition-all hover:bg-zinc-800 disabled:cursor-wait disabled:opacity-70 disabled:hover:bg-black ${canSubmit ? "" : "opacity-50"}`}
           >
-            {loading ? "Submitting Response…" : `Submit Response (${answered}/${total})`}
+            {loading ? <><span className="btn-spinner" aria-hidden="true" />Submitting Response…</> : `Submit Response (${answered}/${total})`}
           </button>
           <div className="flex items-center justify-center gap-2 text-xs text-zinc-400">
             <span>🔒 Fully anonymous</span>

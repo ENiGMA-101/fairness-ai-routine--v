@@ -192,7 +192,7 @@ html.dark ::selection { background: #6d4fd1; color: #fff; }
 .research-card-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 15px; }
 .research-card-tags > span { display: inline-flex; gap: 5px; align-items: center; border-radius: 6px; background: var(--home-soft); padding: 5px 8px; color: var(--home-text); font-size: 10px; font-weight: 550; }
 .research-card-action { padding-top: 22px; margin-top: auto; }
-.research-open-button { min-height: 47px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid transparent; border-radius: 11px; background: var(--button-bg); color: #fff; font-size: 14px; font-weight: 700; text-decoration: none; box-shadow: 0 3px 6px #29243b10; transition: background .15s, box-shadow .15s; }
+.research-open-button { min-height: 47px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid transparent; border-radius: 11px; background: var(--button-bg); color: #fff; font-size: 14px; font-weight: 700; text-decoration: none; box-shadow: 0 3px 6px #29243b10; transition: background .15s, box-shadow .15s, scale .12s ease; }
 .research-open-button:hover { background: color-mix(in srgb, var(--button-bg) 86%, #000); box-shadow: 0 5px 14px color-mix(in srgb, var(--button-bg) 20%, transparent); }
 .research-open-button svg { transition: transform .15s; }
 .research-open-button:hover svg { transform: translateX(4px); }
@@ -282,4 +282,49 @@ html.dark ::selection { background: #6d4fd1; color: #fff; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+
+/* ---------- Interaction feedback & navigation state ---------- */
+/* Remove the legacy 300ms tap delay and give every enabled button an immediate pressed state. */
+button, a[href], [role="button"], summary { touch-action: manipulation; }
+button:not(:disabled):active,
+.nav-link:active { scale: .975; }
+button:disabled { cursor: not-allowed; }
+.nav-link, button { -webkit-tap-highlight-color: rgb(124 92 255 / .18); }
+
+/* Top progress bar: starts in the same frame as the click (see NavigationProgress). */
+html[data-nav="loading"] body::before {
+  content: ""; position: fixed; top: 0; left: 0; z-index: 9999; height: 3px; width: 0;
+  background: linear-gradient(90deg, #7c5cff, #4f46e5, #22b8cf);
+  box-shadow: 0 0 10px rgb(124 92 255 / .6);
+  pointer-events: none;
+  animation: nav-progress 8s cubic-bezier(.1, .6, .2, 1) forwards;
+}
+@keyframes nav-progress { 0% { width: 0; } 12% { width: 35%; } 100% { width: 92%; } }
+
+/* In-button pending overlay (only shows if navigation takes longer than ~120ms). */
+.nav-pending { display: none; }
+.nav-pending[data-pending="true"] {
+  display: grid; place-items: center; position: absolute; inset: 0; border-radius: inherit;
+  background: rgb(15 23 42 / .22); pointer-events: none; opacity: 0;
+  animation: nav-pending-in .15s ease 120ms forwards;
+}
+.nav-pending[data-pending="true"]::after {
+  content: ""; width: 16px; height: 16px; border-radius: 999px;
+  border: 2px solid rgb(255 255 255 / .45); border-top-color: #fff;
+  animation: nav-spin .7s linear infinite;
+}
+@keyframes nav-pending-in { to { opacity: 1; } }
+@keyframes nav-spin { to { transform: rotate(360deg); } }
+
+/* Async-action spinner used inside submit/refresh buttons. */
+.btn-spinner {
+  display: inline-block; width: 1em; height: 1em; margin-right: .5em; vertical-align: -.15em; border-radius: 999px;
+  border: 2px solid currentColor; border-right-color: transparent; animation: nav-spin .7s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button:not(:disabled):active, .nav-link:active { scale: 1; }
+  html[data-nav="loading"] body::before { animation-duration: 0s; width: 60%; }
+  .nav-pending[data-pending="true"]::after, .btn-spinner { animation-duration: 1.6s; }
 }

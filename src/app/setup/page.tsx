@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import NavLink from "@/components/NavLink";
 import { useCallback, useEffect, useState } from "react";
 import {
   KeyRound,
@@ -82,12 +82,12 @@ export default function AdminConsolePage() {
     <main className="min-h-screen bg-[#f6f5f2] pb-16">
       <div className="mx-auto max-w-3xl px-5 pt-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <Link
+          <NavLink
             href="/"
             className="flex items-center gap-1.5 text-sm font-semibold text-zinc-600 hover:text-zinc-900"
           >
             <Home className="h-4 w-4" /> Back to survey
-          </Link>
+          </NavLink>
           <span className="flex items-center gap-1.5 rounded-full border border-zinc-300 bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
             <ShieldCheck className="h-3.5 w-3.5" /> Administrator Console
           </span>

@@ -1,5 +1,5 @@
 import RotatingHeadline from "@/components/RotatingHeadline";
-import Link from "next/link";
+import NavLink from "@/components/NavLink";
 import {
   ArrowDown,
   ArrowRight,
@@ -16,6 +16,7 @@ import {
   Sparkles,
   UsersRound,
 } from "lucide-react";
+import { preload } from "react-dom";
 import fs from "node:fs";
 import path from "node:path";
 import PollStatsWarmup from "@/components/PollStatsWarmup";
@@ -46,8 +47,11 @@ function getMediaAssets() {
   return { videoSrc, posterSrc };
 }
 
-export const dynamic = "force-dynamic";
-
+// Home is statically generated at build time (the media lookup below reads the
+// build's public/assets folder). A static route is served from the CDN with no
+// serverless/database work and, crucially, can be FULLY prefetched by <Link>, so
+// returning Home is an instant client-side transition. All live data on this page
+// (participant counts, results) is fetched client-side after paint.
 export const metadata = {
   title: "Fairness-Aware AI Routine Generator · Research Project",
   description:
@@ -56,6 +60,10 @@ export const metadata = {
 
 export default function Home() {
   const { videoSrc, posterSrc } = getMediaAssets();
+  // Serve a right-sized optimized poster (the original JPEG is ~620 KB) and hint the
+  // browser to fetch it first, since it is the largest contentful element.
+  const optimizedPoster = `/_next/image?url=${encodeURIComponent(posterSrc)}&w=640&q=75`;
+  preload(optimizedPoster, { as: "image", fetchPriority: "high" });
 
   return (
     <div className="research-site">
@@ -64,13 +72,13 @@ export default function Home() {
 
       <header className="research-header">
         <div className="research-container research-header-inner">
-          <Link href="/" className="research-brand" aria-label="Fairness-Aware AI Routine Generator — home">
+          <NavLink href="/" className="research-brand" aria-label="Fairness-Aware AI Routine Generator — home">
             <span className="research-brand-icon"><Layers3 size={23} strokeWidth={1.8} /></span>
             <span>
               <span className="research-brand-name">Fairness-Aware AI Routine Generator</span>
               <span className="research-brand-caption">Research Project</span>
             </span>
-          </Link>
+          </NavLink>
           <nav className="research-navigation" aria-label="Main navigation">
             <a href="#about" className="research-nav-about">About the research</a>
             <a
@@ -82,9 +90,9 @@ export default function Home() {
               <span>Live Participants</span>
               <ArrowDown size={14} />
             </a>
-            <Link href="/results/form1" className="research-results-link">
+            <NavLink href="/results/form1" className="research-results-link">
               <BarChart3 size={16} /> <span>Live results</span> <ArrowUpRight size={14} />
-            </Link>
+            </NavLink>
           </nav>
         </div>
       </header>
@@ -110,8 +118,8 @@ export default function Home() {
                 <video
                   controls
                   playsInline
-                  preload="metadata"
-                  poster={posterSrc}
+                  preload="none"
+                  poster={optimizedPoster}
                   className="research-video-player"
                   aria-label="Fairness-Aware AI Routine Generator promotional video"
                 >
@@ -135,9 +143,9 @@ export default function Home() {
                 <div className="research-card-tags"><span><UsersRound size={13} /> Students &amp; teachers</span><span>Bangla + English</span></div>
 
                 <div className="research-card-action">
-                  <Link href="/form1" className="research-open-button" aria-label="Open Form 1 — Student and Teacher Survey">
+                  <NavLink href="/form1" className="research-open-button" aria-label="Open Form 1 — Student and Teacher Survey">
                     <span>Open Form 1</span><ArrowRight size={19} />
-                  </Link>
+                  </NavLink>
                   <span className="research-card-note"><ShieldCheck size={13} /> No account needed</span>
                 </div>
               </article>
@@ -154,9 +162,9 @@ export default function Home() {
                 <div className="research-card-tags"><span><Clock3 size={13} /> 7 time slots</span><span>1–5 rating scale</span></div>
 
                 <div className="research-card-action">
-                  <Link href="/form2" className="research-open-button" aria-label="Open Form 2 — Time-Slot Rating Survey">
+                  <NavLink href="/form2" className="research-open-button" aria-label="Open Form 2 — Time-Slot Rating Survey">
                     <span>Open Form 2</span><ArrowRight size={19} />
-                  </Link>
+                  </NavLink>
                   <span className="research-card-note"><ShieldCheck size={13} /> No account needed</span>
                 </div>
               </article>

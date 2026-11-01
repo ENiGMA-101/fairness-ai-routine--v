@@ -1,4 +1,4 @@
-import Link from "next/link";
+import NavLink from "@/components/NavLink";
 import HomeButton from "@/components/HomeButton";
 import RefreshButton from "@/components/RefreshButton";
 import { BarRow, RatingCard, StatTile } from "@/components/ResultCards";
@@ -23,12 +23,12 @@ export default async function Form2ResultsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <HomeButton />
         <div className="flex flex-wrap items-center gap-2">
-          <Link
+          <NavLink
             href="/results/form1"
             className="rounded-full border border-zinc-300 bg-white px-4 py-2 text-xs font-semibold text-zinc-700 hover:border-zinc-500"
           >
             Form 1 results →
-          </Link>
+          </NavLink>
           <RefreshButton />
         </div>
       </div>
@@ -65,9 +65,9 @@ export default async function Form2ResultsPage() {
           {data.totalResponses === 0 ? (
             <div className="mt-8 rounded-2xl border border-dashed border-zinc-300 bg-white p-8 text-center text-sm text-zinc-500">
               No responses yet.{" "}
-              <Link href="/form2" className="font-semibold text-violet-700">
+              <NavLink href="/form2" className="font-semibold text-violet-700">
                 Be the first to rate the time slots →
-              </Link>
+              </NavLink>
             </div>
           ) : (
             <>

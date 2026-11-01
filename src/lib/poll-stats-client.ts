@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PollStats, PollStatsMap } from "@/lib/poll-stats";
 
 export type { PollStats, PollStatsMap };
@@ -77,6 +77,8 @@ export function preloadPollStats(form: SurveyForm, refresh = false): Promise<Pol
 export function useSurveyPollStats(form: SurveyForm) {
   const [stats, setStats] = useState<PollStatsMap>({});
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  // Skip React updates when a poll returns identical numbers (avoids re-rendering the whole survey every 6s).
+  const lastJson = useRef("");
 
   useEffect(() => {
     let active = true;
@@ -85,6 +87,7 @@ export function useSurveyPollStats(form: SurveyForm) {
     if (cached) {
       queueMicrotask(() => {
         if (!active) return;
+        lastJson.current = JSON.stringify(cached);
         setStats(cached);
         setStatus("ready");
       });
@@ -94,7 +97,11 @@ export function useSurveyPollStats(form: SurveyForm) {
       void preloadPollStats(form, refresh)
         .then((latest) => {
           if (!active) return;
-          setStats(latest); // always replace with the newest snapshot
+          const json = JSON.stringify(latest);
+          if (json !== lastJson.current) {
+            lastJson.current = json;
+            setStats(latest); // replace whenever the database numbers actually changed
+          }
           setStatus("ready");
         })
         .catch(() => {

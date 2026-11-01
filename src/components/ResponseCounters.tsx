@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import NavLink from "@/components/NavLink";
 import { ArrowUpRight, BarChart3, UsersRound, Clock3 } from "lucide-react";
 import { useParticipation } from "@/components/ParticipationProvider";
 
@@ -24,10 +24,10 @@ export default function ResponseCounters() {
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200"><Clock3 className="h-5 w-5" /></span>
         <span><span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Time-slot ratings</span><span className="mt-0.5 block text-xl font-black text-slate-950 dark:text-white" aria-live="polite">{number(counts?.form2)} <span className="text-xs font-medium text-slate-500 dark:text-slate-400">responses</span></span></span>
       </div>
-      <Link href="/results/form2" className="col-span-2 flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-3.5 transition hover:border-violet-400 dark:border-slate-700 dark:bg-[#18243b] dark:hover:border-violet-400 md:col-span-1">
+      <NavLink href="/results/form2" className="col-span-2 flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-3.5 transition hover:border-violet-400 dark:border-slate-700 dark:bg-[#18243b] dark:hover:border-violet-400 md:col-span-1">
         <span className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200"><BarChart3 className="h-5 w-5" /></span><span><span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Explore insights</span><span className="text-sm font-black text-slate-900 dark:text-white">View time-slot rankings</span></span></span>
         <ArrowUpRight className="h-4 w-4 text-violet-600 dark:text-violet-300" />
-      </Link>
+      </NavLink>
     </div>
   );
 }

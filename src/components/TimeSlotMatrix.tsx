@@ -37,7 +37,7 @@ export default function TimeSlotMatrix({ values, onChange, initialStats, statsSt
   }
 
   return (
-    <section className="survey-card mb-6 rounded-[26px] border border-slate-200 bg-white p-5 shadow-[0_12px_36px_-28px_rgba(38,48,84,0.42)] sm:p-7 dark:border-slate-700 dark:bg-[#18233b]">
+    <section id="question-time-slots" className="survey-card mb-6 rounded-[26px] border border-slate-200 bg-white p-5 shadow-[0_12px_36px_-28px_rgba(38,48,84,0.42)] sm:p-7 dark:border-slate-700 dark:bg-[#18233b]">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-5 dark:border-slate-700">
         <div>
           <div className="flex items-center gap-2">

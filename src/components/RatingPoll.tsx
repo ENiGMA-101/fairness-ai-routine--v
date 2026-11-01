@@ -52,7 +52,7 @@ export default function RatingPoll({
   }
 
   return (
-    <section className="survey-card mb-6 rounded-[26px] border border-slate-200 bg-white p-5 shadow-[0_12px_36px_-28px_rgba(38,48,84,0.42)] sm:p-7 dark:border-slate-700 dark:bg-[#18233b]">
+    <section id={`question-${questionId}`} className="survey-card mb-6 rounded-[26px] border border-slate-200 bg-white p-5 shadow-[0_12px_36px_-28px_rgba(38,48,84,0.42)] sm:p-7 dark:border-slate-700 dark:bg-[#18233b]">
       {visual && <div className="survey-visual mb-5">{visual}</div>}
       <div className="flex items-start gap-3">
         {index && <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-fuchsia-100 text-xs font-black text-fuchsia-700 dark:bg-fuchsia-500/20 dark:text-fuchsia-200">{index}</span>}

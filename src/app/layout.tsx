@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import ThemeToggle from "@/components/ThemeToggle";
+import NavigationProgress from "@/components/NavigationProgress";
 import ParticipationProvider from "@/components/ParticipationProvider";
 import "./globals.css";
 
@@ -19,6 +20,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="bn" className="dark" suppressHydrationWarning>
       <head><script dangerouslySetInnerHTML={{ __html: themeScript }} /></head>
       <body className="min-h-screen antialiased">
+        <NavigationProgress />
         <ParticipationProvider>{children}</ParticipationProvider>
         <ThemeToggle />
       </body>

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { getBrowserId, SUBMISSION_EVENT } from "@/lib/browser";
 import { HEARTBEAT_INTERVAL_MS, PARTICIPATION_POLL_MS, type ParticipationSnapshot, type PresenceScope } from "@/lib/participation";
@@ -25,57 +25,98 @@ function scopeFor(path: string): PresenceScope | null {
   return path === "/" ? "home" : null;
 }
 
-/** Shares one aggregate refresh loop and one heartbeat across the public site. */
+// Only these pages actually render participation counters. The survey forms need
+// presence (so they are counted as live) but never display the snapshot, so they
+// must not poll the aggregate endpoint every few seconds while someone is answering.
+const SNAPSHOT_PATHS = new Set(["/", "/results/form1", "/results/form2"]);
+
+/** Run low-priority work after the browser is idle so it never competes with navigation or hydration. */
+function whenIdle(task: () => void, timeout = 1500): () => void {
+  if (typeof window.requestIdleCallback === "function") {
+    const id = window.requestIdleCallback(task, { timeout });
+    return () => window.cancelIdleCallback(id);
+  }
+  const id = window.setTimeout(task, 150);
+  return () => window.clearTimeout(id);
+}
+
+/**
+ * Shares one aggregate refresh loop and one presence heartbeat across the public site.
+ * The provider lives in the root layout, so it (and its last snapshot) survives
+ * client-side navigation; a route change only updates the presence scope.
+ */
 export default function ParticipationProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const scope = scopeFor(pathname);
+  const wantsSnapshot = SNAPSHOT_PATHS.has(pathname);
   const [snapshot, setSnapshot] = useState<ParticipationSnapshot | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
 
-  const refresh = useCallback(async () => {
-    try {
-      const response = await fetch("/api/participation", { cache: "no-store" });
-      if (!response.ok) throw new Error("Connection unavailable");
-      const data = await response.json() as ParticipationSnapshot;
-      if (!data.live || !data.submitted || typeof data.live.total !== "number" || typeof data.submitted.total !== "number") {
-        throw new Error("Invalid participation data");
+  const scopeRef = useRef<PresenceScope | null>(scope);
+  const sessionRef = useRef("");
+  const lastSentScope = useRef<PresenceScope | null>(null);
+  const inflightRefresh = useRef<Promise<void> | null>(null);
+  const inflightBeat = useRef<Promise<boolean> | null>(null);
+
+  /** One GET at a time; concurrent callers (poll, focus, submit, heartbeat) share it. */
+  const refresh = useCallback((): Promise<void> => {
+    if (inflightRefresh.current) return inflightRefresh.current;
+    const request = (async () => {
+      try {
+        const response = await fetch("/api/participation", { cache: "no-store" });
+        if (!response.ok) throw new Error("Connection unavailable");
+        const data = await response.json() as ParticipationSnapshot;
+        if (!data.live || !data.submitted || typeof data.live.total !== "number" || typeof data.submitted.total !== "number") {
+          throw new Error("Invalid participation data");
+        }
+        setSnapshot(data);
+        setStatus("live");
+      } catch {
+        // Retain the last acknowledged values, never substitute invented counts.
+        setStatus("reconnecting");
+      } finally {
+        inflightRefresh.current = null;
       }
-      setSnapshot(data);
-      setStatus("live");
-    } catch {
-      // Retain the last acknowledged values, never substitute invented counts.
-      setStatus("reconnecting");
-    }
+    })();
+    inflightRefresh.current = request;
+    return request;
   }, []);
 
-  useEffect(() => {
-    if (!scope) return;
-    const browserId = getBrowserId();
-    // Each tab/route lifetime has its own token. A late leave cannot remove a new
-    // tab or route, and aggregates deduplicate all sessions by the browser ID.
-    const sessionId = typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID()
-      : `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    let alive = true;
-    let pending = false;
-    const heartbeat = async () => {
-      if (!alive || pending || document.hidden || !navigator.onLine) return;
-      pending = true;
+  /** Presence heartbeat (never blocks UI; deduplicated while one is in flight). */
+  const heartbeat = useCallback((): Promise<boolean> => {
+    const scopeNow = scopeRef.current;
+    if (!scopeNow || document.hidden || !navigator.onLine || !sessionRef.current) return Promise.resolve(false);
+    if (inflightBeat.current) return inflightBeat.current;
+    const request = (async () => {
       try {
         const response = await fetch("/api/participation", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ browserId, sessionId, scope, action: "heartbeat" }),
+          body: JSON.stringify({ browserId: getBrowserId(), sessionId: sessionRef.current, scope: scopeNow, action: "heartbeat" }),
           keepalive: true,
         });
         if (!response.ok) throw new Error("Presence unavailable");
-        if (alive) await refresh();
+        lastSentScope.current = scopeNow;
+        return true;
       } catch {
-        if (alive) setStatus("reconnecting");
+        setStatus("reconnecting");
+        return false;
       } finally {
-        pending = false;
+        inflightBeat.current = null;
       }
-    };
+    })();
+    inflightBeat.current = request;
+    return request;
+  }, []);
+
+  // Presence lifecycle: ONE session per tab. A route change only changes `scope`,
+  // so there is no leave/re-join churn while navigating between pages.
+  useEffect(() => {
+    sessionRef.current = typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const browserId = getBrowserId();
+    const sessionId = sessionRef.current;
     const leave = () => {
       const payload = JSON.stringify({ browserId, sessionId, action: "leave" });
       if (navigator.sendBeacon?.("/api/participation", new Blob([payload], { type: "application/json" }))) return;
@@ -83,34 +124,49 @@ export default function ParticipationProvider({ children }: { children: ReactNod
         method: "POST", headers: { "Content-Type": "application/json" }, body: payload, keepalive: true,
       }).catch(() => {});
     };
+    const resume = () => { void heartbeat(); };
     const visibilityChanged = () => {
       if (document.hidden) leave();
-      else void heartbeat();
+      else resume();
     };
-    const online = () => { void heartbeat(); };
-    void heartbeat();
-    const timer = window.setInterval(() => { void heartbeat(); }, HEARTBEAT_INTERVAL_MS);
+    const timer = window.setInterval(resume, HEARTBEAT_INTERVAL_MS);
     window.addEventListener("pagehide", leave);
-    window.addEventListener("pageshow", online);
-    window.addEventListener("online", online);
-    window.addEventListener("focus", online);
+    window.addEventListener("pageshow", resume);
+    window.addEventListener("online", resume);
+    window.addEventListener("focus", resume);
     document.addEventListener("visibilitychange", visibilityChanged);
     return () => {
-      alive = false;
       window.clearInterval(timer);
       window.removeEventListener("pagehide", leave);
-      window.removeEventListener("pageshow", online);
-      window.removeEventListener("online", online);
-      window.removeEventListener("focus", online);
+      window.removeEventListener("pageshow", resume);
+      window.removeEventListener("online", resume);
+      window.removeEventListener("focus", resume);
       document.removeEventListener("visibilitychange", visibilityChanged);
       leave();
+      sessionRef.current = "";
+      lastSentScope.current = null;
     };
-  }, [scope, refresh]);
+  }, [heartbeat]);
 
+  // Scope / page change: register the new scope (only if it changed) and, on pages
+  // that show counters, take one snapshot. Deferred to idle time so it never delays
+  // the navigation that triggered it. This replaces the old double POST+GET+GET burst.
   useEffect(() => {
+    scopeRef.current = scope;
     if (!scope) return;
+    return whenIdle(() => {
+      if (document.hidden) return;
+      void (async () => {
+        if (lastSentScope.current !== scope) await heartbeat();
+        if (wantsSnapshot) await refresh();
+      })();
+    });
+  }, [scope, wantsSnapshot, heartbeat, refresh]);
+
+  // Live counter polling: only while a page that displays the counters is visible.
+  useEffect(() => {
+    if (!wantsSnapshot) return;
     const update = () => { if (!document.hidden) void refresh(); };
-    update();
     const timer = window.setInterval(update, PARTICIPATION_POLL_MS);
     window.addEventListener(SUBMISSION_EVENT, update);
     window.addEventListener("storage", update);
@@ -123,7 +179,8 @@ export default function ParticipationProvider({ children }: { children: ReactNod
       window.removeEventListener("focus", update);
       document.removeEventListener("visibilitychange", update);
     };
-  }, [scope, refresh]);
+  }, [wantsSnapshot, refresh]);
 
-  return <ParticipationContext.Provider value={{ snapshot, status, refresh }}>{children}</ParticipationContext.Provider>;
+  const value = useMemo(() => ({ snapshot, status, refresh }), [snapshot, status, refresh]);
+  return <ParticipationContext.Provider value={value}>{children}</ParticipationContext.Provider>;
 }

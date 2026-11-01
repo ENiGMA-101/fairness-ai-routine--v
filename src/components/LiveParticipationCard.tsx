@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import NavLink from "@/components/NavLink";
 import { useState } from "react";
 import { ArrowUpRight, Check, CheckCircle2, Radio, RefreshCw, ShieldCheck, UsersRound } from "lucide-react";
 import { useParticipation } from "@/components/ParticipationProvider";
@@ -81,7 +81,7 @@ export default function LiveParticipationCard() {
 
       <div className="participation-card-footer">
         <span><ShieldCheck size={14} /> Drafts stay on your device. Only submitted answers count.</span>
-        <Link href={filter === "form2" ? "/results/form2" : "/results/form1"}>Live Dashboard <ArrowUpRight size={14} /></Link>
+        <NavLink href={filter === "form2" ? "/results/form2" : "/results/form1"}>Live Dashboard <ArrowUpRight size={14} /></NavLink>
       </div>
     </section>
   );

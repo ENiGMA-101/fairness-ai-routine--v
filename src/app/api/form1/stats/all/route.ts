@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cachedValue } from "@/lib/stats-cache";
 import { eq } from "drizzle-orm";
 import { db, ensureTablesExist, isDatabaseConfigured, isDatabaseMarkedBroken, markDatabaseBroken } from "@/db";
 import { form1Responses } from "@/db/schema";
@@ -58,6 +59,8 @@ async function readAll(): Promise<PollStatsMap> {
 }
 
 export async function GET() {
-  const data = await readAll();
+  // Shared 1.5s window: N concurrent pollers cost one database read, while a new
+  // submission (invalidate on submit) or the next poll still shows fresh results.
+  const data = await cachedValue("poll-stats-form1", 1_500, readAll);
   return NextResponse.json(data, { headers: { "Cache-Control": "no-store" } });
 }

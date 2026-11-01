@@ -3,6 +3,7 @@ import { and, eq, lt, sql } from "drizzle-orm";
 import { db, ensureTablesExist } from "@/db";
 import { form1Responses, form2Responses, surveyPresence } from "@/db/schema";
 import { SURVEY_VERSION } from "@/lib/survey";
+import { cachedValue, invalidate } from "@/lib/stats-cache";
 import { PRESENCE_TIMEOUT_SECONDS, type ParticipationSnapshot } from "@/lib/participation";
 
 export const dynamic = "force-dynamic";
@@ -19,10 +20,9 @@ type CountsRow = {
 };
 
 /** Database-only aggregates. Drafts and local submission markers are never read. */
-export async function GET() {
-  try {
-    await ensureTablesExist();
-    const result = await db.execute<CountsRow>(sql`
+async function readSnapshot(): Promise<ParticipationSnapshot> {
+  await ensureTablesExist();
+  const result = await db.execute<CountsRow>(sql`
       WITH active AS (
         SELECT ${surveyPresence.browserId} AS browser_id, ${surveyPresence.scope} AS scope
         FROM ${surveyPresence}
@@ -42,12 +42,19 @@ export async function GET() {
         (SELECT count(DISTINCT browser_id) FROM submitted WHERE form = 'form1') AS submitted_form1,
         (SELECT count(DISTINCT browser_id) FROM submitted WHERE form = 'form2') AS submitted_form2
     `);
-    const row = result.rows[0];
-    const snapshot: ParticipationSnapshot = {
-      live: { total: Number(row.live_total), form1: Number(row.live_form1), form2: Number(row.live_form2) },
-      submitted: { total: Number(row.submitted_total), form1: Number(row.submitted_form1), form2: Number(row.submitted_form2) },
-      updatedAt: new Date().toISOString(),
-    };
+  const row = result.rows[0];
+  return {
+    live: { total: Number(row.live_total), form1: Number(row.live_form1), form2: Number(row.live_form2) },
+    submitted: { total: Number(row.submitted_total), form1: Number(row.submitted_form1), form2: Number(row.submitted_form2) },
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export async function GET() {
+  try {
+    // Shared 1.5s window across all concurrent pollers (clients poll every 4s);
+    // "home-stats" is already invalidated by both submit routes.
+    const snapshot = await cachedValue("home-stats:participation", 1_500, readSnapshot, { staleOnError: false });
     return NextResponse.json(snapshot, { headers });
   } catch (error) {
     console.error("Participation aggregate unavailable:", error);
@@ -88,9 +95,14 @@ export async function POST(request: NextRequest) {
           set: { scope: scope as string, lastSeen: sql`now()` },
           setWhere: eq(surveyPresence.browserId, browserId),
         });
-      // Physical cleanup is additive and never touches either response table.
-      await db.delete(surveyPresence).where(lt(surveyPresence.lastSeen, sql`now() - interval '5 minutes'`));
+      // Physical cleanup is additive and never touches either response table. Live counts
+      // already ignore rows older than the timeout, so tidy up on ~1 in 8 heartbeats
+      // instead of paying an extra database round trip on every one.
+      if (Math.random() < 0.125) {
+        await db.delete(surveyPresence).where(lt(surveyPresence.lastSeen, sql`now() - interval '5 minutes'`));
+      }
     }
+    invalidate("home-stats:participation");
     return NextResponse.json({ ok: true }, { headers });
   } catch (error) {
     console.error("Presence heartbeat unavailable:", error);
