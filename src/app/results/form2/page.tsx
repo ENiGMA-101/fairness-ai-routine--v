@@ -2,7 +2,6 @@ import NavLink from "@/components/NavLink";
 import HomeButton from "@/components/HomeButton";
 import RefreshButton from "@/components/RefreshButton";
 import FeedbackExplorer from "@/components/FeedbackExplorer";
-import SuggestionResults from "@/components/SuggestionResults";
 import { BarRow, RatingCard, StatTile } from "@/components/ResultCards";
 import { getForm2Results, type Form2Results } from "@/lib/results";
 import { cachedValue } from "@/lib/stats-cache";
@@ -140,8 +139,6 @@ export default async function Form2ResultsPage() {
                   </div>
                 </div>
               </div>
-
-              <SuggestionResults summary={data.suggestionSummary} items={data.suggestions} />
 
               <FeedbackExplorer feedback={data.feedback} />
             </>
