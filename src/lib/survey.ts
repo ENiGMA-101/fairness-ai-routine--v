@@ -316,14 +316,14 @@ export const FORM2_COPY = {
   fairnessBn: "ধরুন, কোনো শিক্ষার্থী দল বা শিক্ষক এই সেমিস্টারে একটি খারাপ রুটিন পেলেন। এআই (AI)-এর কি এটি মনে রাখা উচিত এবং পরের সেমিস্টারে তাদের একটি ভালো রুটিন দেওয়ার চেষ্টা করা উচিত?",
   fairnessLeft: "না, প্রতিটি সেমিস্টারকে আলাদাভাবে দেখা উচিত",
   fairnessRight: "হ্যাঁ, এআই-এর উচিত পরের সেমিস্টারে তাদের সুবিধা পুষিয়ে দেওয়া",
-  feedbackTitle: "4. Additional Feedback & Constraints",
+  feedbackTitle: "5. Additional Feedback & Constraints",
   feedbackBn: "এআই রুটিন জেনারেটরের বিবেচনা করা উচিত—এমন আর কোনো পরামর্শ বা সমস্যা কি আপনার জানা আছে? আপনার মতামত এখানে লিখুন।",
   feedbackPlaceholder: "Short answer text",
 } as const;
 
 /**
- * Optional Form 2 question shown immediately before "4. Additional Feedback & Constraints".
- * Additive only: it does not change any existing question, id or answer domain.
+ * Mandatory Form 2 Question 4 shown immediately before "5. Additional Feedback & Constraints".
+ * Selecting "Yes" reveals three optional suggestion fields (question, Option A, Option B).
  */
 export const FORM2_SUGGESTION_CHOICES = ["yes", "no"] as const;
 export type Form2SuggestionChoice = (typeof FORM2_SUGGESTION_CHOICES)[number];
@@ -336,8 +336,8 @@ export const FORM2_SUGGESTION_COPY = {
   yesBn: "হ্যাঁ, আমার একটি পরামর্শ আছে।",
   no: "No, the questions are sufficient.",
   noBn: "না, প্রশ্নগুলো যথেষ্ট।",
-  builderTitle: "Your suggested question",
-  builderTitleBn: "আপনার প্রস্তাবিত প্রশ্ন",
+  builderTitle: "Your suggested question (Optional)",
+  builderTitleBn: "আপনার প্রস্তাবিত প্রশ্ন (ঐচ্ছিক)",
   questionLabel: "Suggested Question",
   questionLabelBn: "প্রস্তাবিত প্রশ্ন",
   questionPlaceholder: "Write your proposed question here...",
@@ -347,10 +347,8 @@ export const FORM2_SUGGESTION_COPY = {
   optionBLabel: "Option B",
   optionBLabelBn: "অপশন খ",
   optionBPlaceholder: "Write option B here...",
-  optionalHint: "Optional — you can skip this question or any field below.",
-  optionalHintBn: "ঐচ্ছিক — আপনি এই প্রশ্ন বা নিচের যেকোনো ঘর ফাঁকা রাখতে পারেন।",
-  clear: "Clear selection",
-  clearBn: "নির্বাচন মুছুন",
+  requiredError: "Please select one option above before submitting.",
+  requiredErrorBn: "জমা দেওয়ার আগে অনুগ্রহ করে উপরের যেকোনো একটি অপশন নির্বাচন করুন।",
 } as const;
 
 export const FORM1_QUESTION_KEYS = FORM1_QUESTIONS.map((question) => question.id);

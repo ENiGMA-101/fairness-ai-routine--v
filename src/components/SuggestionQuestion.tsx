@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import { CheckCircle2, Lightbulb, PlusCircle, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, Lightbulb } from "lucide-react";
 import {
   FORM2_SUGGESTION_COPY as COPY,
   FORM2_SUGGESTION_LIMITS,
@@ -17,22 +17,24 @@ export type SuggestionFields = {
 type Props = {
   choice: Form2SuggestionChoice | "";
   fields: SuggestionFields;
-  onChoice: (value: Form2SuggestionChoice | "") => void;
+  onChoice: (value: Form2SuggestionChoice) => void;
   onField: (field: keyof SuggestionFields, value: string) => void;
+  showError?: boolean;
 };
 
 const inputClass =
   "mt-1.5 w-full rounded-2xl border-2 border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20";
 
 /**
- * Optional Form 2 question placed before "4. Additional Feedback & Constraints".
- * Choosing "Yes" reveals a tiny question builder (question + Option A + Option B).
+ * Mandatory Form 2 Question 4 placed immediately before "5. Additional Feedback & Constraints".
+ * Choosing "Yes" reveals a question builder (Suggested Question + Option A + Option B).
  * The builder stays mounted while collapsed, so text typed before switching to "No"
  * is kept and reappears if the respondent switches back to "Yes".
  */
-export default function SuggestionQuestion({ choice, fields, onChoice, onField }: Props) {
+export default function SuggestionQuestion({ choice, fields, onChoice, onField, showError = false }: Props) {
   const uid = useId();
   const open = choice === "yes";
+  const hasError = showError && choice !== "yes" && choice !== "no";
   const options: { value: Form2SuggestionChoice; label: string; bn: string; Icon: typeof Lightbulb }[] = [
     { value: "yes", label: COPY.yes, bn: COPY.yesBn, Icon: Lightbulb },
     { value: "no", label: COPY.no, bn: COPY.noBn, Icon: CheckCircle2 },
@@ -41,25 +43,31 @@ export default function SuggestionQuestion({ choice, fields, onChoice, onField }
   return (
     <section
       id="question-suggestion"
+      tabIndex={-1}
       aria-labelledby={`${uid}-title`}
-      className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 shadow-sm md:p-7"
+      className={`survey-card mb-6 rounded-[28px] border bg-white p-6 shadow-sm outline-none transition-colors md:p-7 ${
+        hasError ? "border-amber-300 ring-2 ring-amber-500/15" : "border-zinc-200/80"
+      }`}
     >
-      <div className="flex items-start gap-2">
-        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
-          <PlusCircle className="h-4 w-4" aria-hidden="true" />
+      <div className="flex items-start gap-2.5">
+        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-xs font-black text-violet-700">
+          4
         </span>
         <div className="min-w-0">
           <h3 id={`${uid}-title`} className="text-[17px] font-bold leading-snug text-zinc-900">
-            {COPY.title}
+            4. {COPY.title} *
           </h3>
           <p lang="bn" className="mt-1 text-sm leading-relaxed text-zinc-600">{COPY.titleBn}</p>
         </div>
       </div>
-      <p className="mt-2 text-xs font-semibold text-zinc-500">
-        {COPY.optionalHint} <span lang="bn">{COPY.optionalHintBn}</span>
-      </p>
 
-      <div role="radiogroup" aria-labelledby={`${uid}-title`} className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div
+        role="radiogroup"
+        aria-required="true"
+        aria-invalid={hasError}
+        aria-labelledby={`${uid}-title`}
+        className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2"
+      >
         {options.map(({ value, label, bn, Icon }) => {
           const selected = choice === value;
           return (
@@ -91,14 +99,17 @@ export default function SuggestionQuestion({ choice, fields, onChoice, onField }
         })}
       </div>
 
-      {choice ? (
-        <button
-          type="button"
-          onClick={() => onChoice("")}
-          className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-zinc-500 underline-offset-2 hover:text-violet-700 hover:underline"
+      {hasError ? (
+        <div
+          role="alert"
+          data-testid="suggestion-choice-error"
+          className="mt-3.5 flex items-center gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-900"
         >
-          <X className="h-3 w-3" aria-hidden="true" /> {COPY.clear} · <span lang="bn">{COPY.clearBn}</span>
-        </button>
+          <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+          <span>
+            {COPY.requiredError} / <span lang="bn">{COPY.requiredErrorBn}</span>
+          </span>
+        </div>
       ) : null}
 
       {/* Smooth reveal. Collapsed content is inert, so it cannot be focused or announced. */}
@@ -127,34 +138,36 @@ export default function SuggestionQuestion({ choice, fields, onChoice, onField }
               />
             </div>
 
-            <div>
-              <label htmlFor={`${uid}-a`} className="text-sm font-bold text-zinc-800">
-                {COPY.optionALabel} <span lang="bn" className="text-xs font-medium text-zinc-500">· {COPY.optionALabelBn}</span>
-              </label>
-              <input
-                id={`${uid}-a`}
-                type="text"
-                maxLength={FORM2_SUGGESTION_LIMITS.option}
-                value={fields.suggestedOptionA}
-                onChange={(event) => onField("suggestedOptionA", event.target.value)}
-                placeholder={COPY.optionAPlaceholder}
-                className={inputClass}
-              />
-            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor={`${uid}-a`} className="text-sm font-bold text-zinc-800">
+                  {COPY.optionALabel} <span lang="bn" className="text-xs font-medium text-zinc-500">· {COPY.optionALabelBn}</span>
+                </label>
+                <input
+                  id={`${uid}-a`}
+                  type="text"
+                  maxLength={FORM2_SUGGESTION_LIMITS.option}
+                  value={fields.suggestedOptionA}
+                  onChange={(event) => onField("suggestedOptionA", event.target.value)}
+                  placeholder={COPY.optionAPlaceholder}
+                  className={inputClass}
+                />
+              </div>
 
-            <div>
-              <label htmlFor={`${uid}-b`} className="text-sm font-bold text-zinc-800">
-                {COPY.optionBLabel} <span lang="bn" className="text-xs font-medium text-zinc-500">· {COPY.optionBLabelBn}</span>
-              </label>
-              <input
-                id={`${uid}-b`}
-                type="text"
-                maxLength={FORM2_SUGGESTION_LIMITS.option}
-                value={fields.suggestedOptionB}
-                onChange={(event) => onField("suggestedOptionB", event.target.value)}
-                placeholder={COPY.optionBPlaceholder}
-                className={inputClass}
-              />
+              <div>
+                <label htmlFor={`${uid}-b`} className="text-sm font-bold text-zinc-800">
+                  {COPY.optionBLabel} <span lang="bn" className="text-xs font-medium text-zinc-500">· {COPY.optionBLabelBn}</span>
+                </label>
+                <input
+                  id={`${uid}-b`}
+                  type="text"
+                  maxLength={FORM2_SUGGESTION_LIMITS.option}
+                  value={fields.suggestedOptionB}
+                  onChange={(event) => onField("suggestedOptionB", event.target.value)}
+                  placeholder={COPY.optionBPlaceholder}
+                  className={inputClass}
+                />
+              </div>
             </div>
           </div>
         </div>

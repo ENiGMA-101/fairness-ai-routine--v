@@ -101,8 +101,20 @@ export default function Home() {
         <section className="research-intro research-container" aria-labelledby="research-heading">
           <div className="research-eyebrow"><span /> University of Asia Pacific · Research study</div>
           <RotatingHeadline />
-          <p className="research-intro-text">Your experience can help shape a more balanced university routine.<br className="desktop-break" /> Choose a short survey below. Start with either one.</p>
-          <p lang="bn" className="research-intro-bn">আপনার মতামত গুরুত্বপূর্ণ। নিচের যেকোনো জরিপ দিয়ে শুরু করুন।</p>
+          <p className="research-intro-text">
+            Your feedback helps us design fairer and more balanced university routines.
+            <br className="desktop-break" />{" "}
+            <span className="research-intro-instruction">
+              Please complete <strong className="research-both-highlight">BOTH</strong> short surveys below — each one contributes to our research.
+            </span>
+          </p>
+          <p lang="bn" className="research-intro-bn">
+            আপনার মতামত আরও ন্যায্য ও ভারসাম্যপূর্ণ বিশ্ববিদ্যালয়ের রুটিন তৈরিতে সহায়তা করবে।
+            <br className="desktop-break" />{" "}
+            <span className="research-intro-instruction-bn">
+              অনুগ্রহ করে নিচের দুটি জরিপই পূরণ করুন — প্রতিটি জরিপ আমাদের গবেষণার জন্য গুরুত্বপূর্ণ।
+            </span>
+          </p>
         </section>
 
         <section id="surveys" className="research-container research-surveys" aria-labelledby="survey-heading">

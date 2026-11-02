@@ -169,11 +169,11 @@ async function main() {
     const fairness = student.locator(".survey-card").filter({ has: student.getByRole("heading", { name: `${FORM2_COPY.fairnessTitle} *`, exact: true }) });
     await longGap.getByRole("button").nth(3).click();
     await fairness.getByRole("button").nth(4).click();
-    await student.getByRole("textbox", { name: "" }).last().fill("Editable local feedback for acceptance testing.");
+    await student.locator("#question-feedback textarea").fill("Editable local feedback for acceptance testing.");
     await student.reload();
     await student.getByText("Welcome back. Your draft is restored.", { exact: true }).waitFor();
     assert.equal(await student.getByPlaceholder("Other", { exact: true }).inputValue(), "Locally saved department");
-    assert.equal(await student.locator("textarea").inputValue(), "Editable local feedback for acceptance testing.");
+    assert.equal(await student.locator("#question-feedback textarea").inputValue(), "Editable local feedback for acceptance testing.");
     assert.equal(await longGap.getByRole("button").nth(3).getAttribute("aria-pressed"), "true");
     assert.equal(await fairness.getByRole("button").nth(4).getAttribute("aria-pressed"), "true");
     await student.locator(`[data-time-slot="${TIME_SLOTS[0].id}"]`).getByRole("button").last().click();
@@ -189,6 +189,7 @@ async function main() {
       const row = student.locator(`[data-time-slot="${slot.id}"]`);
       if (await row.getByRole("button", { pressed: true }).count() === 0) await row.getByRole("button").last().click();
     }
+    await student.locator("#question-suggestion").getByRole("radio", { name: /No, the questions are sufficient/ }).click();
     await student.getByRole("button", { name: /Submit Ratings/ }).click();
     await student.getByRole("heading", { name: "Ratings Submitted!", exact: true }).waitFor();
     assert.equal((await db.select().from(form2Responses).where(eq(form2Responses.browserId, ids[1]))).length, 1);

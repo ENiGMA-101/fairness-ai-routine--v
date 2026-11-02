@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 import { db, ensureTablesExist, isDatabaseConfigured, markDatabaseBroken } from "@/db";
 import { form2Responses } from "@/db/schema";
@@ -83,9 +84,16 @@ export async function POST(req: NextRequest) {
 
   const feedbackText = body.feedback?.toString().trim().slice(0, 2000) || null;
 
-  // Optional suggestion question: every field may be skipped. Suggestion text is only kept
-  // when the respondent answered "Yes"; otherwise the (hidden) fields are not stored.
-  const suggestionChoice = FORM2_SUGGESTION_CHOICES.find((option) => option === body.suggestion_choice) ?? null;
+  // Question 4 is mandatory: respondent must select "yes" or "no".
+  // The three conditional suggestion fields remain optional and are only saved when "yes" is selected.
+  const normalizedChoice = typeof body.suggestion_choice === "string" ? body.suggestion_choice.trim().toLowerCase() : "";
+  const suggestionChoice = FORM2_SUGGESTION_CHOICES.find((option) => option === normalizedChoice) ?? null;
+  if (!suggestionChoice) {
+    return NextResponse.json(
+      { error: "Question 4 is required — please select whether a major question is missing (Yes or No)." },
+      { status: 400 },
+    );
+  }
   const wantsToSuggest = suggestionChoice === "yes";
   const suggestedQuestion = wantsToSuggest ? optionalText(body.suggested_question, FORM2_SUGGESTION_LIMITS.question) : null;
   const suggestedOptionA = wantsToSuggest ? optionalText(body.suggested_option_a, FORM2_SUGGESTION_LIMITS.option) : null;
@@ -132,6 +140,7 @@ export async function POST(req: NextRequest) {
       invalidate("poll-stats-form2");
       invalidate("form2-results");
       invalidate("home-stats");
+      revalidatePath("/results/form2");
       return NextResponse.json({ ok: true, id: inserted[0].id, storage: "database" });
     } catch (pgError) {
       console.error("PostgreSQL submission failed; keeping the browser draft:", pgError);

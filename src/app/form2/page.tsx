@@ -73,10 +73,11 @@ export default function Form2Page() {
     return () => window.removeEventListener("storage", syncSubmission);
   }, []);
 
-  // Keep questions in exact Google Forms serial order: matrix, long gaps, fairness, feedback.
+  // Keep questions in exact Google Forms serial order: matrix, long gaps, fairness, question 4 suggestion check, question 5 feedback.
   const ratingOrder = RATING_QUESTION_IDS;
 
-  const total = 11;
+  const hasSuggestionChoice = suggestionChoice === "yes" || suggestionChoice === "no";
+  const total = 12;
   const answered = useMemo(() => {
     let count = 0;
     if (role) count += 1;
@@ -84,8 +85,9 @@ export default function Form2Page() {
     count += Object.keys(timeSlots).length;
     if (longGap) count += 1;
     if (fairness) count += 1;
+    if (hasSuggestionChoice) count += 1;
     return count;
-  }, [role, department, timeSlots, longGap, fairness]);
+  }, [role, department, timeSlots, longGap, fairness, hasSuggestionChoice]);
 
   const allSlotsRated = TIME_SLOTS.every((s) => Boolean(timeSlots[s.id]));
   const canSubmit =
@@ -94,14 +96,29 @@ export default function Form2Page() {
     allSlotsRated &&
     longGap !== null &&
     fairness !== null &&
+    hasSuggestionChoice &&
     (department !== "Other" || departmentOther.trim().length > 0);
 
   const submit = async () => {
     if (submittingRef.current || !localDraft.ready || loading || submitted || isSubmitted("form2")) return;
     if (!canSubmit) {
-      // Respond to the click: explain what is missing and jump to it (validation rules unchanged).
+      // Respond to the click: explain what is missing and jump to it.
       setShowIncomplete(true);
-      const firstMissing = !role ? "role" : !department ? "department" : (department === "Other" && !departmentOther.trim()) ? "department" : !allSlotsRated ? "time-slots" : longGap === null ? "long_gap_rating" : fairness === null ? "fairness_rating" : undefined;
+      const firstMissing = !role
+        ? "role"
+        : !department
+          ? "department"
+          : (department === "Other" && !departmentOther.trim())
+            ? "department"
+            : !allSlotsRated
+              ? "time-slots"
+              : longGap === null
+                ? "long_gap_rating"
+                : fairness === null
+                  ? "fairness_rating"
+                  : !hasSuggestionChoice
+                    ? "suggestion"
+                    : undefined;
       if (firstMissing) focusSurveyQuestion(firstMissing);
       return;
     }
@@ -376,19 +393,20 @@ export default function Form2Page() {
           );
         })}
 
-        {/* Optional question: missing-question suggestion (placed immediately before question 4) */}
+        {/* Question 4: Mandatory missing-question check + optional conditional suggestion fields */}
         <SuggestionQuestion
           choice={suggestionChoice}
           fields={{ suggestedQuestion, suggestedOptionA, suggestedOptionB }}
           onChoice={setSuggestionChoice}
           onField={setSuggestionField}
+          showError={showIncomplete && !hasSuggestionChoice}
         />
 
-        {/* Question 4: Free-text feedback */}
-        <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
+        {/* Question 5: Free-text feedback */}
+        <section id="question-feedback" className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">
           <div className="flex items-center gap-2">
             <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-violet-100 text-xs font-black text-violet-700">
-              4
+              5
             </span>
             <h3 className="text-[17px] font-bold text-zinc-900">{FORM2_COPY.feedbackTitle}</h3>
           </div>
@@ -420,7 +438,6 @@ export default function Form2Page() {
             onClick={submit}
             disabled={!localDraft.ready || loading || submitted}
             aria-busy={loading}
-            aria-disabled={!canSubmit}
             className={`w-full rounded-[24px] bg-black py-5 text-lg font-black text-white shadow-xl transition-all hover:bg-zinc-800 disabled:cursor-wait disabled:opacity-70 disabled:hover:bg-black ${canSubmit ? "" : "opacity-50"}`}
           >
             {loading ? <><span className="btn-spinner" aria-hidden="true" />Submitting Ratings…</> : `Submit Ratings (${answered}/${total})`}

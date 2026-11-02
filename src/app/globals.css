@@ -258,33 +258,47 @@ select, option {
 .research-intro { text-align: center; padding-top: 36px; padding-bottom: 29px; }
 .research-eyebrow { display: flex; align-items: center; justify-content: center; gap: 7px; color: var(--home-purple); text-transform: uppercase; letter-spacing: 1.5px; font-size: 10px; font-weight: 750; }
 .research-eyebrow > span { display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--home-purple); }
-.research-intro h1 { margin: 12px 0 0; font-size: clamp(30px, 3.35vw, 45px); line-height: 1.16; letter-spacing: -1.9px; font-weight: 760; }
+.research-intro h1 { margin: 12px 0 0; font-size: clamp(20px, 2.5vw, 35px); line-height: 1.22; letter-spacing: -1.2px; font-weight: 760; }
 .research-intro h1 > span { color: var(--home-purple); }
 
-/* Two-part headline: one phrase per line, each line a fixed-height slot. */
-.research-intro h1.headline { display: flex; flex-direction: column; align-items: center; }
+/* Single-line desktop headline with two alternating phrases. */
+.research-intro h1.headline {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 0.28em;
+  white-space: nowrap;
+  min-height: 1.25em;
+}
 .research-intro h1 > .headline-slot {
-  display: grid;
-  width: 100%;
-  justify-items: center;
-  align-items: center;
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
   color: var(--home-heading, inherit);
-  transition: color 700ms ease;
+  transition: color 500ms ease;
 }
 .research-intro h1 > .headline-slot[data-accent="true"] { color: var(--home-purple); }
 .headline-phrase {
-  grid-area: 1 / 1;
+  display: inline-block;
   text-align: center;
-  text-wrap: balance;
-  opacity: 0;
-  transform: translateY(12px);
-  transition: opacity 600ms ease, transform 600ms ease;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 360ms cubic-bezier(0.22, 1, 0.36, 1), transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: opacity, transform;
 }
 .headline-phrase[data-state="active"] { opacity: 1; transform: translateY(0); }
-.headline-phrase[data-state="exit"] { opacity: 0; transform: translateY(-12px); }
-/* Resting alternatives are invisible; skip the transition so they reset silently. */
-.headline-phrase[data-state="idle"] { transition: none; }
+.headline-phrase[data-state="exit"] {
+  opacity: 0;
+  transform: translateY(-9px);
+  transition: opacity 230ms ease, transform 230ms ease;
+}
+.headline-phrase[data-state="enter"] {
+  opacity: 0;
+  transform: translateY(9px);
+  transition: none;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .research-intro h1 > .headline-slot { transition: none; }
@@ -293,7 +307,18 @@ select, option {
 
 .mobile-break { display: none; }
 .research-intro-text { margin-top: 13px; font-size: 14px; line-height: 1.65; color: var(--home-text); }
+.research-intro-instruction { color: var(--home-heading); font-weight: 600; }
+.research-both-highlight {
+  display: inline-block;
+  color: var(--home-purple);
+  background: var(--home-purple-tint);
+  padding: 1px 7px;
+  border-radius: 6px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
 .research-intro-bn { margin-top: 6px; color: var(--home-muted); font-size: 12px; line-height: 1.6; }
+.research-intro-instruction-bn { color: var(--home-text); font-weight: 600; }
 .research-surveys { scroll-margin-top: 24px; }
 .research-section-label { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
 .research-section-label h2 { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 650; color: var(--home-text); }
@@ -369,11 +394,21 @@ select, option {
   .research-results-link > svg:last-child { display: none; }
   .research-intro { padding-block: 27px 23px; }
   .research-eyebrow { font-size: 8px; letter-spacing: 1.1px; }
-  .research-intro h1 { font-size: 33px; letter-spacing: -1.2px; margin-top: 10px; }
+  .research-intro h1 { font-size: clamp(20px, 5.4vw, 26px); letter-spacing: -.75px; margin-top: 10px; line-height: 1.25; }
+  .research-intro h1.headline {
+    flex-direction: column;
+    flex-wrap: wrap;
+    align-items: center;
+    white-space: normal;
+    gap: 2px;
+    min-height: 2.55em;
+  }
+  .research-intro h1 > .headline-slot { white-space: normal; }
+  .headline-phrase { text-wrap: balance; }
   .mobile-break { display: block; }
   .desktop-break { display: none; }
-  .research-intro-text { font-size: 12px; margin-top: 10px; max-width: 360px; margin-inline: auto; }
-  .research-intro-bn { font-size: 11px; max-width: 360px; margin-inline: auto; }
+  .research-intro-text { font-size: 12px; margin-top: 10px; max-width: 380px; margin-inline: auto; }
+  .research-intro-bn { font-size: 11px; max-width: 380px; margin-inline: auto; }
   .research-section-label h2 { font-size: 11px; }
   .research-survey-grid { grid-template-columns: 1fr; gap: 14px; }
   .research-survey-layout { grid-template-columns: 1fr; gap: 14px; }
@@ -475,7 +510,7 @@ html[data-nav="loading"] body::before {
 .suggestion-reveal[data-open="true"] > div { padding-bottom: 4px; }
 .dark .suggestion-reveal [class*="border-violet-100"] { background-color: #232447; }
 
-/* Very narrow phones: keep every headline phrase within two lines so the reserved slot height stays compact. */
+/* Very narrow phones: keep every headline phrase compact and readable without overflow. */
 @media (max-width: 420px) {
-  .research-intro h1.headline { font-size: 28px; letter-spacing: -1px; }
+  .research-intro h1.headline { font-size: 21px; letter-spacing: -.65px; }
 }

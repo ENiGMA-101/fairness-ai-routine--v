@@ -3,23 +3,22 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 
 /**
- * Two-part hero headline with alternating "fixed" and "changing" phrases.
+ * Single-line desktop hero headline with two alternating modes:
  *
- *   Mode A – first phrase fixed ("Better schedules."), second phrase changes.
- *   Mode B – second phrase fixed ("Better learning experiences."), first phrase changes.
+ *   Mode A – first phrase fixed ("Better schedules."), second phrase changes:
+ *     0 Better schedules.             | Better learning experiences.
+ *     1 Better schedules.             | Fairer university routines.
+ *     2 Better schedules.             | Smarter scheduling decisions.
+ *     3 Better schedules.             | More balanced academic life.
  *
- * The loop below is built so that every step changes exactly ONE phrase; the two
- * phrases never change at the same time:
+ *   Mode B – second phrase fixed ("Better learning experiences."), first phrase changes:
+ *     4 Better schedules.             | Better learning experiences.
+ *     5 Fairer university routines.   | Better learning experiences.
+ *     6 Smarter scheduling decisions. | Better learning experiences.
+ *     7 More balanced academic life.  | Better learning experiences.
  *
- *   0 Better schedules.             | Better learning experiences.   (start of Mode A)
- *   1 Better schedules.             | Fairer university routines.
- *   2 Better schedules.             | Smarter scheduling decisions.
- *   3 Better schedules.             | More balanced academic life.
- *   4 Better schedules.             | Better learning experiences.   (start of Mode B, 2nd phrase changes)
- *   5 Fairer university routines.   | Better learning experiences.
- *   6 Smarter scheduling decisions. | Better learning experiences.
- *   7 More balanced academic life.  | Better learning experiences.
- *   → back to 0 (1st phrase changes back to "Better schedules.")
+ * Every transition changes ONLY ONE phrase at a time; the fixed phrase remains
+ * completely static throughout its sequence.
  */
 const FIRST = [
   "Better schedules.",
@@ -27,6 +26,7 @@ const FIRST = [
   "Smarter scheduling decisions.",
   "More balanced academic life.",
 ] as const;
+
 const SECOND = [
   "Better learning experiences.",
   "Fairer university routines.",
@@ -40,16 +40,18 @@ const FRAMES: readonly (readonly [number, number])[] = [
   [0, 0], [1, 0], [2, 0], [3, 0], // Mode B: "Better learning experiences." stays fixed
 ];
 
-/** How long each combination stays on screen (the 600ms CSS transition is part of this). */
-const HOLD_MS = 3600;
+/** How long each phrase pair stays visible (~3.5 seconds). */
+const HOLD_MS = 3500;
+const EXIT_MS = 240;
 
 type Slot = "first" | "second";
+type Phase = "active" | "exit" | "enter";
 
-/** The slot that changed to produce `frame` – it receives the purple accent. */
-function changedSlot(frame: number, previous: number): Slot {
+/** Which slot changes when advancing from `previous` to `next`. */
+function changedSlot(next: number, previous: number): Slot {
   const [pf] = FRAMES[previous];
-  const [f] = FRAMES[frame];
-  return pf !== f ? "first" : "second";
+  const [nf] = FRAMES[next];
+  return pf !== nf ? "first" : "second";
 }
 
 function subscribeReducedMotion(onChange: () => void) {
@@ -60,65 +62,100 @@ function subscribeReducedMotion(onChange: () => void) {
 const getReducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const getServerReducedMotion = () => false;
 
-function PhraseSlot({
-  phrases,
-  active,
-  exiting,
-  accent,
-}: {
-  phrases: readonly string[];
-  active: number;
-  exiting: number | null;
-  accent: boolean;
-}) {
-  // All phrases share one grid cell: the slot is always as tall as its tallest phrase,
-  // so changing text can never move the content below it.
-  return (
-    <span className="headline-slot" data-accent={accent}>
-      {phrases.map((phrase, index) => {
-        const state = index === active ? "active" : index === exiting ? "exit" : "idle";
-        return (
-          <span key={phrase} className="headline-phrase" data-state={state} aria-hidden={state !== "active"}>
-            {phrase}
-          </span>
-        );
-      })}
-    </span>
-  );
-}
+type StepState = {
+  frame: number;
+  changingSlot: Slot;
+  phase: Phase;
+};
 
 export default function RotatingHeadline() {
   const reducedMotion = useSyncExternalStore(subscribeReducedMotion, getReducedMotion, getServerReducedMotion);
-  const [{ frame, previous }, setStep] = useState({ frame: 0, previous: 0 });
+  const [{ frame, changingSlot, phase }, setStep] = useState<StepState>({
+    frame: 0,
+    changingSlot: "second",
+    phase: "active",
+  });
 
   useEffect(() => {
-    // Respect prefers-reduced-motion: keep the first, complete headline static.
     if (reducedMotion) return;
-    // One timer per step; cleanup on every step change and on unmount.
-    const timer = window.setTimeout(() => {
-      setStep((current) => ({ frame: (current.frame + 1) % FRAMES.length, previous: current.frame }));
-    }, HOLD_MS);
-    return () => window.clearTimeout(timer);
-  }, [frame, reducedMotion]);
+
+    if (phase === "active") {
+      const holdTimer = window.setTimeout(() => {
+        setStep((current) => {
+          const nextFrame = (current.frame + 1) % FRAMES.length;
+          const slot = changedSlot(nextFrame, current.frame);
+          return {
+            frame: current.frame,
+            changingSlot: slot,
+            phase: "exit",
+          };
+        });
+      }, HOLD_MS);
+      return () => window.clearTimeout(holdTimer);
+    }
+
+    if (phase === "exit") {
+      const exitTimer = window.setTimeout(() => {
+        setStep((current) => {
+          const nextFrame = (current.frame + 1) % FRAMES.length;
+          const slot = changedSlot(nextFrame, current.frame);
+          return {
+            frame: nextFrame,
+            changingSlot: slot,
+            phase: "enter",
+          };
+        });
+      }, EXIT_MS);
+      return () => window.clearTimeout(exitTimer);
+    }
+
+    // phase === "enter": trigger smooth upward slide + fade in on next paint frame
+    let raf2 = 0;
+    const raf1 = window.requestAnimationFrame(() => {
+      raf2 = window.requestAnimationFrame(() => {
+        setStep((current) => ({ ...current, phase: "active" }));
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(raf1);
+      if (raf2) window.cancelAnimationFrame(raf2);
+    };
+  }, [frame, phase, reducedMotion]);
 
   const [firstIndex, secondIndex] = reducedMotion ? FRAMES[0] : FRAMES[frame];
-  const [prevFirst, prevSecond] = FRAMES[previous];
-  const changed: Slot = reducedMotion || frame === previous ? "second" : changedSlot(frame, previous);
+  const mode = !reducedMotion && frame >= 4 ? "B" : "A";
+  const activeSlot: Slot = reducedMotion ? "second" : changingSlot;
+  const firstState: Phase = !reducedMotion && changingSlot === "first" ? phase : "active";
+  const secondState: Phase = !reducedMotion && changingSlot === "second" ? phase : "active";
 
   return (
-    <h1 id="research-heading" className="headline" data-reduced-motion={reducedMotion}>
-      <PhraseSlot
-        phrases={FIRST}
-        active={firstIndex}
-        exiting={prevFirst !== firstIndex ? prevFirst : null}
-        accent={changed === "first"}
-      />
-      <PhraseSlot
-        phrases={SECOND}
-        active={secondIndex}
-        exiting={prevSecond !== secondIndex ? prevSecond : null}
-        accent={changed === "second"}
-      />
+    <h1
+      id="research-heading"
+      className="headline"
+      data-mode={mode}
+      data-changing-slot={activeSlot}
+      data-reduced-motion={reducedMotion}
+    >
+      <span
+        className="headline-slot"
+        data-slot="first"
+        data-accent={activeSlot === "first"}
+        data-fixed={activeSlot !== "first"}
+      >
+        <span className="headline-phrase" data-state={firstState}>
+          {FIRST[firstIndex]}
+        </span>
+      </span>{" "}
+      <span
+        className="headline-slot"
+        data-slot="second"
+        data-accent={activeSlot === "second"}
+        data-fixed={activeSlot !== "second"}
+      >
+        <span className="headline-phrase" data-state={secondState}>
+          {SECOND[secondIndex]}
+        </span>
+      </span>
     </h1>
   );
 }
