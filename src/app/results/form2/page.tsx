@@ -1,6 +1,7 @@
 import NavLink from "@/components/NavLink";
 import HomeButton from "@/components/HomeButton";
 import RefreshButton from "@/components/RefreshButton";
+import FeedbackExplorer from "@/components/FeedbackExplorer";
 import { BarRow, RatingCard, StatTile } from "@/components/ResultCards";
 import { getForm2Results, type Form2Results } from "@/lib/results";
 import { cachedValue } from "@/lib/stats-cache";
@@ -139,23 +140,7 @@ export default async function Form2ResultsPage() {
                 </div>
               </div>
 
-              <section className="mt-4 rounded-[24px] border border-zinc-200 bg-white p-6 shadow-sm">
-                <h2 className="text-lg font-bold">Additional feedback &amp; constraints</h2>
-                {data.feedback.length === 0 ? (
-                  <p className="mt-3 text-sm text-zinc-500">No written feedback yet.</p>
-                ) : (
-                  <ul className="mt-4 space-y-3">
-                    {data.feedback.map((item, i) => (
-                      <li key={i} className="rounded-2xl bg-zinc-50 p-4">
-                        <div className="text-[11px] uppercase tracking-wide text-zinc-400">
-                          {item.role} • {item.department}
-                        </div>
-                        <div className="mt-1 text-sm leading-relaxed text-zinc-700">{item.text}</div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
+              <FeedbackExplorer feedback={data.feedback} />
             </>
           )}
         </>

@@ -164,6 +164,14 @@ export async function getForm1Results(): Promise<Form1Results> {
   };
 }
 
+export type Form2FeedbackItem = {
+  id?: string;
+  text: string;
+  role: string;
+  department: string;
+  createdAt: string;
+};
+
 export type Form2Results = {
   totalResponses: number;
   students: number;
@@ -173,7 +181,7 @@ export type Form2Results = {
   fairness: RatingSummary;
   roleSplit: Distribution;
   departmentSplit: Distribution;
-  feedback: { text: string; role: string; department: string }[];
+  feedback: Form2FeedbackItem[];
   bestSlot?: RatingSummary;
   worstSlot?: RatingSummary;
   isFallback?: boolean;
@@ -261,11 +269,15 @@ export async function getForm2Results(): Promise<Form2Results> {
     })(),
     feedback: rows
       .filter((r) => r.feedback && r.feedback.trim().length > 0)
-      .slice(0, 40)
       .map((r) => ({
+        id: r.id,
         text: r.feedback as string,
         role: r.role,
         department: r.departmentOther ?? r.department,
+        createdAt:
+          r.createdAt instanceof Date
+            ? r.createdAt.toISOString()
+            : String(r.createdAt),
       })),
     bestSlot: sorted[0],
     worstSlot: sorted[sorted.length - 1],
