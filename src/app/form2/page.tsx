@@ -20,6 +20,7 @@ import { useSurveyPollStats } from "@/lib/poll-stats-client";
 import { VisualFairness, VisualLongGapForm2 } from "@/components/Visuals";
 import { clearDraft, getBrowserId, isSubmitted, markSubmitted } from "@/lib/browser";
 import DraftNotice from "@/components/DraftNotice";
+import SuggestionQuestion from "@/components/SuggestionQuestion";
 import { focusSurveyQuestion } from "@/components/SurveyNavigator";
 import { EMPTY_FORM2_DRAFT, restoreForm2Draft, useLocalSurveyDraft } from "@/lib/local-draft";
 import {
@@ -28,6 +29,7 @@ import {
   FORM2_DEPARTMENT_OPTIONS,
   ROLE_OPTIONS,
   TIME_SLOTS,
+  type Form2SuggestionChoice,
 } from "@/lib/survey";
 
 type RatingQId = "long_gap_rating" | "fairness_rating";
@@ -35,7 +37,10 @@ const RATING_QUESTION_IDS: RatingQId[] = ["long_gap_rating", "fairness_rating"];
 
 export default function Form2Page() {
   const localDraft = useLocalSurveyDraft("form2", EMPTY_FORM2_DRAFT, restoreForm2Draft);
-  const { role, department, departmentOther, timeSlots, longGap, fairness, feedback } = localDraft.draft;
+  const {
+    role, department, departmentOther, timeSlots, longGap, fairness, feedback,
+    suggestionChoice, suggestedQuestion, suggestedOptionA, suggestedOptionB,
+  } = localDraft.draft;
   const setRole = (value: string) => localDraft.update("role", value);
   const setDepartment = (value: string) => localDraft.update("department", value);
   const setDepartmentOther = (value: string) => localDraft.update("departmentOther", value);
@@ -43,6 +48,9 @@ export default function Form2Page() {
   const setLongGap = (value: number | null) => localDraft.update("longGap", value);
   const setFairness = (value: number | null) => localDraft.update("fairness", value);
   const setFeedback = (value: string) => localDraft.update("feedback", value);
+  const setSuggestionChoice = (value: Form2SuggestionChoice | "") => localDraft.update("suggestionChoice", value);
+  const setSuggestionField = (field: "suggestedQuestion" | "suggestedOptionA" | "suggestedOptionB", value: string) =>
+    localDraft.update(field, value);
   const [submitted, setSubmitted] = useState(false);
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -114,6 +122,11 @@ export default function Form2Page() {
           long_gap_rating: longGap,
           fairness_rating: fairness,
           feedback,
+          // Optional question: the suggestion text is only sent when "Yes" is selected.
+          suggestion_choice: suggestionChoice || null,
+          suggested_question: suggestionChoice === "yes" ? suggestedQuestion : null,
+          suggested_option_a: suggestionChoice === "yes" ? suggestedOptionA : null,
+          suggested_option_b: suggestionChoice === "yes" ? suggestedOptionB : null,
         }),
       });
 
@@ -362,6 +375,14 @@ export default function Form2Page() {
             />
           );
         })}
+
+        {/* Optional question: missing-question suggestion (placed immediately before question 4) */}
+        <SuggestionQuestion
+          choice={suggestionChoice}
+          fields={{ suggestedQuestion, suggestedOptionA, suggestedOptionB }}
+          onChoice={setSuggestionChoice}
+          onField={setSuggestionField}
+        />
 
         {/* Question 4: Free-text feedback */}
         <section className="mb-6 rounded-[28px] border border-zinc-200/80 bg-white p-6 md:p-7 shadow-sm">

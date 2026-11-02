@@ -53,6 +53,18 @@ create table if not exists form2_responses (
   constraint form2_browser_version_unique unique (browser_id, survey_version)
 );
 
+-- Optional Form 2 suggestion question (additive, nullable; existing rows are untouched).
+alter table form2_responses add column if not exists suggestion_choice text;
+alter table form2_responses add column if not exists suggested_question text;
+alter table form2_responses add column if not exists suggested_option_a text;
+alter table form2_responses add column if not exists suggested_option_b text;
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'form2_suggestion_choice_check') then
+    alter table form2_responses add constraint form2_suggestion_choice_check
+      check (suggestion_choice is null or suggestion_choice in ('yes', 'no'));
+  end if;
+end $$;
+
 -- Upgrade pre-versioned installations. Existing rows remain version 1 and are
 -- intentionally excluded from v2 analytics because several questions changed meaning.
 alter table form1_responses add column if not exists survey_version integer;

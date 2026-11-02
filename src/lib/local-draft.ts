@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { clearDraft, draftKey, getBrowserId, isSubmitted, SUBMISSION_EVENT, type SurveyForm } from "@/lib/browser";
-import { DEPARTMENTS, FORM1_ALLOWED_VALUES, SURVEY_VERSION, TIME_SLOTS } from "@/lib/survey";
+import {
+  DEPARTMENTS,
+  FORM1_ALLOWED_VALUES,
+  FORM2_SUGGESTION_CHOICES,
+  type Form2SuggestionChoice,
+  SURVEY_VERSION,
+  TIME_SLOTS,
+} from "@/lib/survey";
 
 export type Form1Draft = {
   role: string;
@@ -18,11 +25,17 @@ export type Form2Draft = {
   longGap: number | null;
   fairness: number | null;
   feedback: string;
+  /** Optional "are we missing a question?" answer; "" = not answered. */
+  suggestionChoice: Form2SuggestionChoice | "";
+  suggestedQuestion: string;
+  suggestedOptionA: string;
+  suggestedOptionB: string;
 };
 
 export const EMPTY_FORM1_DRAFT: Form1Draft = { role: "", department: "", departmentOther: "", answers: {} };
 export const EMPTY_FORM2_DRAFT: Form2Draft = {
   role: "", department: "", departmentOther: "", timeSlots: {}, longGap: null, fairness: null, feedback: "",
+  suggestionChoice: "", suggestedQuestion: "", suggestedOptionA: "", suggestedOptionB: "",
 };
 
 function object(value: unknown): Record<string, unknown> {
@@ -59,7 +72,19 @@ export function restoreForm2Draft(raw: unknown): Form2Draft {
     const answer = rating(slots[slot.id]);
     if (answer !== null) timeSlots[slot.id] = answer;
   }
-  return { ...profile(value), timeSlots, longGap: rating(value.longGap), fairness: rating(value.fairness), feedback: text(value.feedback) };
+  // Drafts saved before the optional suggestion question existed simply restore it as empty.
+  const choice = FORM2_SUGGESTION_CHOICES.find((option) => option === value.suggestionChoice) ?? "";
+  return {
+    ...profile(value),
+    timeSlots,
+    longGap: rating(value.longGap),
+    fairness: rating(value.fairness),
+    feedback: text(value.feedback),
+    suggestionChoice: choice,
+    suggestedQuestion: text(value.suggestedQuestion),
+    suggestedOptionA: text(value.suggestedOptionA),
+    suggestedOptionB: text(value.suggestedOptionB),
+  };
 }
 
 /**

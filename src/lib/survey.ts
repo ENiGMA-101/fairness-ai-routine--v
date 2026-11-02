@@ -321,6 +321,38 @@ export const FORM2_COPY = {
   feedbackPlaceholder: "Short answer text",
 } as const;
 
+/**
+ * Optional Form 2 question shown immediately before "4. Additional Feedback & Constraints".
+ * Additive only: it does not change any existing question, id or answer domain.
+ */
+export const FORM2_SUGGESTION_CHOICES = ["yes", "no"] as const;
+export type Form2SuggestionChoice = (typeof FORM2_SUGGESTION_CHOICES)[number];
+export const FORM2_SUGGESTION_LIMITS = { question: 500, option: 200 } as const;
+
+export const FORM2_SUGGESTION_COPY = {
+  title: "Do you think we are missing any major question that would be helpful for our Fairness-Aware AI Routine Generator?",
+  titleBn: "আপনার মতে, Fairness-Aware AI Routine Generator গবেষণার জন্য গুরুত্বপূর্ণ এমন কোনো প্রশ্ন কি বাদ পড়েছে?",
+  yes: "Yes, I have a suggestion.",
+  yesBn: "হ্যাঁ, আমার একটি পরামর্শ আছে।",
+  no: "No, the questions are sufficient.",
+  noBn: "না, প্রশ্নগুলো যথেষ্ট।",
+  builderTitle: "Your suggested question",
+  builderTitleBn: "আপনার প্রস্তাবিত প্রশ্ন",
+  questionLabel: "Suggested Question",
+  questionLabelBn: "প্রস্তাবিত প্রশ্ন",
+  questionPlaceholder: "Write your proposed question here...",
+  optionALabel: "Option A",
+  optionALabelBn: "অপশন ক",
+  optionAPlaceholder: "Write option A here...",
+  optionBLabel: "Option B",
+  optionBLabelBn: "অপশন খ",
+  optionBPlaceholder: "Write option B here...",
+  optionalHint: "Optional — you can skip this question or any field below.",
+  optionalHintBn: "ঐচ্ছিক — আপনি এই প্রশ্ন বা নিচের যেকোনো ঘর ফাঁকা রাখতে পারেন।",
+  clear: "Clear selection",
+  clearBn: "নির্বাচন মুছুন",
+} as const;
+
 export const FORM1_QUESTION_KEYS = FORM1_QUESTIONS.map((question) => question.id);
 
 export const FORM1_COLUMN_KEYS = [

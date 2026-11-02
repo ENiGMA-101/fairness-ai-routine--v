@@ -48,6 +48,10 @@ export type Form2Record = {
   longGapRating: number;
   fairnessRating: number;
   feedback: string | null;
+  suggestionChoice?: string | null;
+  suggestedQuestion?: string | null;
+  suggestedOptionA?: string | null;
+  suggestedOptionB?: string | null;
   createdAt: string;
 };
 

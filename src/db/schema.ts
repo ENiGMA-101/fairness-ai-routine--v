@@ -102,11 +102,17 @@ export const form2Responses = pgTable(
     longGapRating: integer("long_gap_rating").notNull(),
     fairnessRating: integer("fairness_rating").notNull(),
     feedback: text("feedback"),
+    // Optional "missing question" suggestion (nullable; older rows stay NULL).
+    suggestionChoice: text("suggestion_choice"),
+    suggestedQuestion: text("suggested_question"),
+    suggestedOptionA: text("suggested_option_a"),
+    suggestedOptionB: text("suggested_option_b"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     uniqueIndex("form2_browser_version_unique").on(table.browserId, table.surveyVersion),
     check("form2_role_check", sql`${table.role} in ('Student', 'Teacher')`),
+    check("form2_suggestion_choice_check", sql`${table.suggestionChoice} is null or ${table.suggestionChoice} in ('yes', 'no')`),
     check(
       "form2_rating_range_check",
       sql`${table.timeSlot800} between 1 and 5

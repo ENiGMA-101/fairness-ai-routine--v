@@ -2,7 +2,14 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db, ensureTablesExist, isDatabaseConfigured, markDatabaseBroken } from "@/db";
 import { form2Responses } from "@/db/schema";
 import { addForm2Response } from "@/lib/storage";
-import { DEPARTMENTS, ROLE_OPTIONS, SURVEY_VERSION, TIME_SLOTS } from "@/lib/survey";
+import {
+  DEPARTMENTS,
+  FORM2_SUGGESTION_CHOICES,
+  FORM2_SUGGESTION_LIMITS,
+  ROLE_OPTIONS,
+  SURVEY_VERSION,
+  TIME_SLOTS,
+} from "@/lib/survey";
 import { invalidate } from "@/lib/stats-cache";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +25,16 @@ type Body = {
   long_gap_rating?: number;
   fairness_rating?: number;
   feedback?: string | null;
+  suggestion_choice?: string | null;
+  suggested_question?: string | null;
+  suggested_option_a?: string | null;
+  suggested_option_b?: string | null;
 };
+
+function optionalText(value: unknown, max: number): string | null {
+  if (typeof value !== "string") return null;
+  return value.trim().slice(0, max) || null;
+}
 
 function rating(value: unknown): number | null {
   const n = Number(value);
@@ -67,6 +83,14 @@ export async function POST(req: NextRequest) {
 
   const feedbackText = body.feedback?.toString().trim().slice(0, 2000) || null;
 
+  // Optional suggestion question: every field may be skipped. Suggestion text is only kept
+  // when the respondent answered "Yes"; otherwise the (hidden) fields are not stored.
+  const suggestionChoice = FORM2_SUGGESTION_CHOICES.find((option) => option === body.suggestion_choice) ?? null;
+  const wantsToSuggest = suggestionChoice === "yes";
+  const suggestedQuestion = wantsToSuggest ? optionalText(body.suggested_question, FORM2_SUGGESTION_LIMITS.question) : null;
+  const suggestedOptionA = wantsToSuggest ? optionalText(body.suggested_option_a, FORM2_SUGGESTION_LIMITS.option) : null;
+  const suggestedOptionB = wantsToSuggest ? optionalText(body.suggested_option_b, FORM2_SUGGESTION_LIMITS.option) : null;
+
   const storagePayload = {
     browserId,
     surveyVersion: SURVEY_VERSION,
@@ -83,6 +107,10 @@ export async function POST(req: NextRequest) {
     longGapRating: longGap,
     fairnessRating: fairness,
     feedback: feedbackText,
+    suggestionChoice,
+    suggestedQuestion,
+    suggestedOptionA,
+    suggestedOptionB,
   };
 
   // Try PostgreSQL if configured

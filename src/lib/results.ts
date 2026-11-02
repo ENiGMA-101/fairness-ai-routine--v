@@ -172,6 +172,25 @@ export type Form2FeedbackItem = {
   createdAt: string;
 };
 
+export type Form2SuggestionItem = {
+  id?: string;
+  question: string | null;
+  optionA: string | null;
+  optionB: string | null;
+  role: string;
+  department: string;
+  createdAt: string;
+};
+
+export type Form2SuggestionSummary = {
+  yes: number;
+  no: number;
+  /** Responses that skipped the optional question (including all earlier responses). */
+  skipped: number;
+  /** "Yes" responses that actually wrote at least one suggestion field. */
+  withText: number;
+};
+
 export type Form2Results = {
   totalResponses: number;
   students: number;
@@ -182,6 +201,8 @@ export type Form2Results = {
   roleSplit: Distribution;
   departmentSplit: Distribution;
   feedback: Form2FeedbackItem[];
+  suggestionSummary: Form2SuggestionSummary;
+  suggestions: Form2SuggestionItem[];
   bestSlot?: RatingSummary;
   worstSlot?: RatingSummary;
   isFallback?: boolean;
@@ -242,10 +263,34 @@ export async function getForm2Results(): Promise<Form2Results> {
     .map((r) => Number((r as unknown as Record<string, unknown>).fairnessRating) || 0)
     .filter((v) => v > 0);
 
+  const clean = (value: string | null | undefined) => (value && value.trim() ? value.trim() : null);
+  const suggestions: Form2SuggestionItem[] = rows
+    .filter((r) => r.suggestionChoice === "yes")
+    .map((r) => ({
+      id: r.id,
+      question: clean(r.suggestedQuestion),
+      optionA: clean(r.suggestedOptionA),
+      optionB: clean(r.suggestedOptionB),
+      role: r.role,
+      department: r.departmentOther ?? r.department,
+      createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
+    }))
+    .filter((item) => item.question || item.optionA || item.optionB);
+  const yesCount = rows.filter((r) => r.suggestionChoice === "yes").length;
+  const noCount = rows.filter((r) => r.suggestionChoice === "no").length;
+  const suggestionSummary: Form2SuggestionSummary = {
+    yes: yesCount,
+    no: noCount,
+    skipped: rows.length - yesCount - noCount,
+    withText: suggestions.length,
+  };
+
   return {
     totalResponses: rows.length,
     students: rows.filter((r) => r.role === "Student").length,
     teachers: rows.filter((r) => r.role === "Teacher").length,
+    suggestionSummary,
+    suggestions,
     slots,
     longGap: ratingSummary(
       "long_gap_rating",
