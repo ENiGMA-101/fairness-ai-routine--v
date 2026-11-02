@@ -77,12 +77,132 @@ html.dark ::selection { background: #6d4fd1; color: #fff; }
 .dark .survey-visual [class*="text-rose-9"], .dark .survey-visual [class*="text-rose-8"] { color: #ffd3e1; }
 .dark .survey-visual [class*="text-red-9"], .dark .survey-visual [class*="text-red-8"] { color: #ffd1d8; }
 
-/* Inputs and the existing success-screen gradients also need contrast. */
-.dark input, .dark textarea {
+/* Inputs, selects, and the existing success-screen gradients also need contrast. */
+select, option {
+  background-color: #ffffff;
+  color: #0f172a;
+}
+.dark input, .dark textarea, .dark select {
   background-color: #1e2c47;
+  color: #f4f6ff;
+  color-scheme: dark;
+}
+.dark option {
+  background-color: #162238;
   color: #f4f6ff;
 }
 .dark input::placeholder, .dark textarea::placeholder { color: #91a1bd; }
+
+/* Feedback Explorer custom dropdown controls and opened option menus (Light & Dark modes) */
+.feedback-dropdown-trigger {
+  background-color: #ffffff;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.feedback-dropdown-trigger:hover {
+  background-color: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+.feedback-dropdown-trigger:focus-visible,
+.feedback-dropdown-trigger[aria-expanded="true"] {
+  background-color: #ffffff;
+  border-color: #0284c7;
+  color: #0f172a;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.25);
+}
+.feedback-dropdown-chevron {
+  color: #475569;
+}
+.feedback-dropdown-trigger:hover .feedback-dropdown-chevron,
+.feedback-dropdown-trigger[aria-expanded="true"] .feedback-dropdown-chevron {
+  color: #0f172a;
+}
+
+.feedback-dropdown-menu {
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 12px 28px -4px rgba(15, 23, 42, 0.14), 0 4px 10px -2px rgba(15, 23, 42, 0.08);
+}
+.feedback-dropdown-option {
+  background-color: #ffffff;
+  color: #1e293b;
+}
+.feedback-dropdown-option:hover,
+.feedback-dropdown-option[data-highlighted="true"] {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+.feedback-dropdown-option[aria-selected="true"] {
+  background-color: #e0f2fe;
+  color: #0c4a6e;
+  font-weight: 700;
+}
+.feedback-dropdown-option[aria-selected="true"]:hover,
+.feedback-dropdown-option[aria-selected="true"][data-highlighted="true"] {
+  background-color: #bae6fd;
+  color: #082f49;
+}
+.feedback-dropdown-check {
+  color: #0284c7;
+}
+
+.dark .feedback-dropdown-trigger {
+  background-color: #1e2c47;
+  color: #f8fafc;
+  border-color: #475569;
+  box-shadow: 0 1px 2px rgba(2, 6, 23, 0.35);
+}
+.dark .feedback-dropdown-trigger:hover {
+  background-color: #283b5e;
+  border-color: #64748b;
+  color: #ffffff;
+}
+.dark .feedback-dropdown-trigger:focus-visible,
+.dark .feedback-dropdown-trigger[aria-expanded="true"] {
+  background-color: #243656;
+  border-color: #38bdf8;
+  color: #ffffff;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.3);
+}
+.dark .feedback-dropdown-chevron {
+  color: #cbd5e1;
+}
+.dark .feedback-dropdown-trigger:hover .feedback-dropdown-chevron,
+.dark .feedback-dropdown-trigger[aria-expanded="true"] .feedback-dropdown-chevron {
+  color: #ffffff;
+}
+
+.dark .feedback-dropdown-menu {
+  background-color: #162238;
+  border-color: #475569;
+  box-shadow: 0 16px 36px -6px rgba(2, 6, 23, 0.78), 0 6px 16px -4px rgba(2, 6, 23, 0.6);
+}
+.dark .feedback-dropdown-option {
+  background-color: #162238;
+  color: #f1f5f9;
+}
+.dark .feedback-dropdown-option:hover,
+.dark .feedback-dropdown-option[data-highlighted="true"] {
+  background-color: #263859;
+  color: #ffffff;
+}
+.dark .feedback-dropdown-option[aria-selected="true"] {
+  background-color: #1e3a5f;
+  color: #e0f2fe;
+  font-weight: 700;
+}
+.dark .feedback-dropdown-option[aria-selected="true"]:hover,
+.dark .feedback-dropdown-option[aria-selected="true"][data-highlighted="true"] {
+  background-color: #254673;
+  color: #ffffff;
+}
+.dark .feedback-dropdown-check {
+  color: #38bdf8;
+}
 .dark [class*="from-zinc-50"][class*="to-[#f6f5f2]"] {
   background-image: linear-gradient(180deg, #0a1326, #13213a);
 }

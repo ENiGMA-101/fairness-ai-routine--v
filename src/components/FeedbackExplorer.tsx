@@ -1,13 +1,238 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, Lock, Search, X } from "lucide-react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
+import { Check, ChevronDown, ChevronUp, Lock, Search, X } from "lucide-react";
 import type { Form2FeedbackItem } from "@/lib/results";
 
 type RoleFilter = "All Roles" | "Student" | "Teacher";
 type SortOrder = "Latest First" | "Oldest First";
 
+const ROLE_FILTER_OPTIONS: readonly RoleFilter[] = [
+  "All Roles",
+  "Student",
+  "Teacher",
+];
+
+const SORT_ORDER_OPTIONS: readonly SortOrder[] = [
+  "Latest First",
+  "Oldest First",
+];
+
 const PREVIEW_CHAR_LIMIT = 200;
+
+type FeedbackDropdownProps<T extends string> = {
+  id: string;
+  label: string;
+  ariaLabel: string;
+  testId: string;
+  value: T;
+  options: readonly T[];
+  onChange: (nextValue: T) => void;
+};
+
+function FeedbackDropdown<T extends string>({
+  id,
+  label,
+  ariaLabel,
+  testId,
+  value,
+  options,
+  onChange,
+}: FeedbackDropdownProps<T>) {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedIndex = options.indexOf(value);
+  const [highlightedIndex, setHighlightedIndex] = useState<number>(
+    selectedIndex >= 0 ? selectedIndex : 0,
+  );
+  const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const listboxId = `${id}-listbox`;
+
+  useEffect(() => {
+    const idx = options.indexOf(value);
+    if (idx >= 0) {
+      setHighlightedIndex(idx);
+    }
+  }, [options, value]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    const handleGlobalKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsOpen(false);
+        buttonRef.current?.focus();
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+    document.addEventListener("keydown", handleGlobalKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+      document.removeEventListener("keydown", handleGlobalKeyDown);
+    };
+  }, [isOpen]);
+
+  const handleSelect = (nextValue: T) => {
+    onChange(nextValue);
+    setIsOpen(false);
+    buttonRef.current?.focus();
+  };
+
+  const handleToggle = () => {
+    setIsOpen((prev) => {
+      const next = !prev;
+      if (next) {
+        const idx = options.indexOf(value);
+        setHighlightedIndex(idx >= 0 ? idx : 0);
+      }
+      return next;
+    });
+  };
+
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (!isOpen) {
+      if (
+        event.key === "ArrowDown" ||
+        event.key === "ArrowUp" ||
+        event.key === "Enter" ||
+        event.key === " "
+      ) {
+        event.preventDefault();
+        const idx = options.indexOf(value);
+        setHighlightedIndex(idx >= 0 ? idx : 0);
+        setIsOpen(true);
+      } else if (event.key === "Home") {
+        event.preventDefault();
+        setHighlightedIndex(0);
+        setIsOpen(true);
+      } else if (event.key === "End") {
+        event.preventDefault();
+        setHighlightedIndex(options.length - 1);
+        setIsOpen(true);
+      }
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setHighlightedIndex((prev) => (prev + 1) % options.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setHighlightedIndex(
+        (prev) => (prev - 1 + options.length) % options.length,
+      );
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setHighlightedIndex(0);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setHighlightedIndex(options.length - 1);
+    } else if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      const targetOption = options[highlightedIndex] ?? value;
+      handleSelect(targetOption);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      setIsOpen(false);
+      buttonRef.current?.focus();
+    } else if (event.key === "Tab") {
+      setIsOpen(false);
+    }
+  };
+
+  return (
+    <div ref={containerRef} className="relative">
+      <label htmlFor={id} className="sr-only">
+        {label}
+      </label>
+      <button
+        ref={buttonRef}
+        id={id}
+        type="button"
+        value={value}
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-controls={listboxId}
+        data-testid={testId}
+        onClick={handleToggle}
+        onKeyDown={handleKeyDown}
+        className="feedback-dropdown-trigger flex w-full items-center justify-between gap-2.5 rounded-xl py-2.5 pl-3.5 pr-3 text-left text-xs font-semibold transition-colors sm:min-w-[152px] sm:w-auto"
+      >
+        <span className="truncate">{value}</span>
+        <ChevronDown
+          className={`feedback-dropdown-chevron h-3.5 w-3.5 shrink-0 transition-transform duration-150 ${
+            isOpen ? "rotate-180" : ""
+          }`}
+          aria-hidden="true"
+        />
+      </button>
+
+      {isOpen && (
+        <ul
+          id={listboxId}
+          role="listbox"
+          aria-label={ariaLabel}
+          aria-activedescendant={
+            highlightedIndex >= 0
+              ? `${id}-option-${highlightedIndex}`
+              : undefined
+          }
+          data-testid={`${testId}-menu`}
+          className="feedback-dropdown-menu absolute left-0 right-0 top-[calc(100%+6px)] z-50 min-w-full overflow-hidden rounded-xl p-1.5"
+        >
+          {options.map((option, index) => {
+            const isSelected = option === value;
+            const isHighlighted = index === highlightedIndex;
+            return (
+              <li
+                key={option}
+                id={`${id}-option-${index}`}
+                role="option"
+                aria-selected={isSelected}
+                data-testid={`${testId}-option-${option}`}
+                data-value={option}
+                data-selected={isSelected ? "true" : "false"}
+                data-highlighted={isHighlighted ? "true" : "false"}
+                onMouseEnter={() => setHighlightedIndex(index)}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => handleSelect(option)}
+                className="feedback-dropdown-option flex cursor-pointer items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-colors select-none"
+              >
+                <span className="truncate">{option}</span>
+                <Check
+                  className={`feedback-dropdown-check h-3.5 w-3.5 shrink-0 transition-opacity ${
+                    isSelected ? "opacity-100" : "opacity-0"
+                  }`}
+                  aria-hidden="true"
+                />
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 export function formatFeedbackTimestamp(createdAt: string): string {
   const date = new Date(createdAt);
@@ -180,48 +405,25 @@ export default function FeedbackExplorer({
         </div>
 
         <div className="grid grid-cols-2 gap-2.5 sm:flex sm:items-center">
-          <div className="relative">
-            <label htmlFor="feedback-role-filter" className="sr-only">
-              Filter by role
-            </label>
-            <select
-              id="feedback-role-filter"
-              aria-label="Filter feedback by role"
-              data-testid="feedback-role-select"
-              value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value as RoleFilter)}
-              className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/70 py-2.5 pl-3.5 pr-9 text-xs font-semibold text-slate-800 transition-colors hover:border-slate-300 focus:border-sky-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 sm:w-auto dark:border-slate-600 dark:bg-[#1e2c47] dark:text-slate-100 dark:hover:border-slate-500 dark:focus:border-sky-400"
-            >
-              <option value="All Roles">All Roles</option>
-              <option value="Student">Student</option>
-              <option value="Teacher">Teacher</option>
-            </select>
-            <ChevronDown
-              className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500 dark:text-slate-300"
-              aria-hidden="true"
-            />
-          </div>
+          <FeedbackDropdown<RoleFilter>
+            id="feedback-role-filter"
+            label="Filter by role"
+            ariaLabel="Filter feedback by role"
+            testId="feedback-role-select"
+            value={roleFilter}
+            options={ROLE_FILTER_OPTIONS}
+            onChange={setRoleFilter}
+          />
 
-          <div className="relative">
-            <label htmlFor="feedback-sort-order" className="sr-only">
-              Sort feedback by submission time
-            </label>
-            <select
-              id="feedback-sort-order"
-              aria-label="Sort feedback by submission time"
-              data-testid="feedback-sort-select"
-              value={sortOrder}
-              onChange={(e) => setSortOrder(e.target.value as SortOrder)}
-              className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/70 py-2.5 pl-3.5 pr-9 text-xs font-semibold text-slate-800 transition-colors hover:border-slate-300 focus:border-sky-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 sm:w-auto dark:border-slate-600 dark:bg-[#1e2c47] dark:text-slate-100 dark:hover:border-slate-500 dark:focus:border-sky-400"
-            >
-              <option value="Latest First">Latest First</option>
-              <option value="Oldest First">Oldest First</option>
-            </select>
-            <ChevronDown
-              className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500 dark:text-slate-300"
-              aria-hidden="true"
-            />
-          </div>
+          <FeedbackDropdown<SortOrder>
+            id="feedback-sort-order"
+            label="Sort feedback by submission time"
+            ariaLabel="Sort feedback by submission time"
+            testId="feedback-sort-select"
+            value={sortOrder}
+            options={SORT_ORDER_OPTIONS}
+            onChange={setSortOrder}
+          />
         </div>
       </div>
 
